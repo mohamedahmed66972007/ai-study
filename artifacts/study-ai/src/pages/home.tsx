@@ -1,12 +1,41 @@
-import { useState } from "react";
-import { useLocation } from "wouter";
-import { Link } from "wouter";
-import { useListDocuments, useGetStats, useListRecentQuestions, useDeleteDocument, getListDocumentsQueryKey, getGetStatsQueryKey } from "@workspace/api-client-react";
+import { useLocation, Link } from "wouter";
+import {
+  useListDocuments,
+  useGetStats,
+  useListRecentQuestions,
+  useDeleteDocument,
+  useListQuestionSheets,
+  useDeleteQuestionSheet,
+  getListDocumentsQueryKey,
+  getListQuestionSheetsQueryKey,
+  getGetStatsQueryKey,
+} from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { BookOpen, FileText, UploadCloud, Trash2, Library, Clock, AlertCircle } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import {
+  BookOpen,
+  FileText,
+  UploadCloud,
+  Trash2,
+  Library,
+  Clock,
+  AlertCircle,
+  FileQuestion,
+  Sparkles,
+  Image as ImageIcon,
+  ChevronLeft,
+  Loader2,
+  ArrowLeft,
+} from "lucide-react";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
 import { motion } from "framer-motion";
@@ -23,174 +52,315 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
+const container = {
+  hidden: { opacity: 0 },
+  show: { opacity: 1, transition: { staggerChildren: 0.06 } },
+};
+const item = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } };
+
 export function Home() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { data: stats, isLoading: statsLoading } = useGetStats();
   const { data: documents, isLoading: docsLoading } = useListDocuments();
-  const { data: recentQuestions, isLoading: recentLoading } = useListRecentQuestions();
-  
+  const { data: sheets, isLoading: sheetsLoading } = useListQuestionSheets({
+    query: {
+      queryKey: getListQuestionSheetsQueryKey(),
+      refetchInterval: 4000,
+    },
+  });
+  const { data: recentQuestions, isLoading: recentLoading } =
+    useListRecentQuestions();
+
   const deleteDoc = useDeleteDocument({
     mutation: {
       onSuccess: () => {
         toast.success("تم حذف المستند بنجاح");
-        queryClient.invalidateQueries({ queryKey: getListDocumentsQueryKey() });
+        queryClient.invalidateQueries({
+          queryKey: getListDocumentsQueryKey(),
+        });
         queryClient.invalidateQueries({ queryKey: getGetStatsQueryKey() });
       },
-      onError: () => {
-        toast.error("حدث خطأ أثناء حذف المستند");
-      }
-    }
+      onError: () => toast.error("حدث خطأ أثناء الحذف"),
+    },
   });
 
-  const container = {
-    hidden: { opacity: 0 },
-    show: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1
-      }
-    }
-  };
-
-  const item = {
-    hidden: { opacity: 0, y: 20 },
-    show: { opacity: 1, y: 0 }
-  };
+  const deleteSheet = useDeleteQuestionSheet({
+    mutation: {
+      onSuccess: () => {
+        toast.success("تم حذف ورقة الأسئلة");
+        queryClient.invalidateQueries({
+          queryKey: getListQuestionSheetsQueryKey(),
+        });
+        queryClient.invalidateQueries({ queryKey: getGetStatsQueryKey() });
+      },
+      onError: () => toast.error("حدث خطأ أثناء الحذف"),
+    },
+  });
 
   return (
-    <div className="container mx-auto px-4 md:px-8 py-8 max-w-6xl space-y-12">
-      {/* Stats Strip */}
-      <section>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card className="bg-primary/5 border-primary/20">
-            <CardContent className="p-6 flex items-center gap-4">
-              <div className="bg-primary/10 p-3 rounded-full">
-                <Library className="h-6 w-6 text-primary" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">إجمالي المستندات</p>
-                {statsLoading ? <Skeleton className="h-8 w-16 mt-1" /> : <h3 className="text-2xl font-bold">{stats?.documentCount || 0}</h3>}
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="bg-primary/5 border-primary/20">
-            <CardContent className="p-6 flex items-center gap-4">
-              <div className="bg-primary/10 p-3 rounded-full">
-                <FileText className="h-6 w-6 text-primary" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">إجمالي الصفحات</p>
-                {statsLoading ? <Skeleton className="h-8 w-16 mt-1" /> : <h3 className="text-2xl font-bold">{stats?.totalPages || 0}</h3>}
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="bg-primary/5 border-primary/20">
-            <CardContent className="p-6 flex items-center gap-4">
-              <div className="bg-primary/10 p-3 rounded-full">
-                <BookOpen className="h-6 w-6 text-primary" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">الأسئلة المجاب عنها</p>
-                {statsLoading ? <Skeleton className="h-8 w-16 mt-1" /> : <h3 className="text-2xl font-bold">{stats?.totalQuestions || 0}</h3>}
-              </div>
-            </CardContent>
-          </Card>
+    <div className="container mx-auto px-4 md:px-8 py-8 md:py-12 max-w-6xl space-y-12">
+      {/* Hero */}
+      <section className="relative overflow-hidden rounded-3xl border border-border/60 bg-gradient-to-bl from-primary/15 via-card to-card p-8 md:p-12">
+        <div className="absolute -top-20 -left-20 h-64 w-64 rounded-full bg-primary/20 blur-3xl pointer-events-none"></div>
+        <div className="relative">
+          <Badge
+            variant="secondary"
+            className="bg-primary/10 text-primary border-primary/20 mb-4"
+          >
+            <Sparkles className="h-3 w-3 ml-1" />
+            مدعوم بالذكاء الاصطناعي
+          </Badge>
+          <h1 className="text-3xl md:text-5xl font-extrabold tracking-tight text-balance leading-tight mb-3">
+            مذاكرتك أصبحت أذكى
+            <span className="block text-primary mt-1">مع مذاكر الذكي</span>
+          </h1>
+          <p className="text-muted-foreground text-base md:text-lg max-w-2xl text-balance">
+            ارفع كتابك أو مذكرتك واسأل أي سؤال، أو ارفع صورة/PDF لورقة أسئلة
+            وسنستخرج الأسئلة ونجيب عنها مع عرض الدليل لكل إجابة.
+          </p>
+          <div className="flex flex-wrap gap-3 mt-6">
+            <Button
+              size="lg"
+              onClick={() => setLocation("/upload")}
+              className="gap-2 shadow-md"
+            >
+              <UploadCloud className="h-5 w-5" />
+              ابدأ الآن
+            </Button>
+            <Button
+              size="lg"
+              variant="outline"
+              onClick={() => setLocation("/sheets")}
+              className="gap-2"
+            >
+              <FileQuestion className="h-5 w-5" />
+              تصفح أوراق الأسئلة
+            </Button>
+          </div>
         </div>
       </section>
 
+      {/* Stats */}
+      <section>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <StatCard
+            icon={Library}
+            label="المستندات"
+            value={stats?.documentCount}
+            loading={statsLoading}
+          />
+          <StatCard
+            icon={FileText}
+            label="الصفحات"
+            value={stats?.totalPages}
+            loading={statsLoading}
+          />
+          <StatCard
+            icon={FileQuestion}
+            label="أوراق الأسئلة"
+            value={stats?.questionSheetCount}
+            loading={statsLoading}
+          />
+          <StatCard
+            icon={BookOpen}
+            label="الأسئلة المُجَابة"
+            value={
+              (stats?.totalQuestions ?? 0) +
+              (stats?.extractedQuestionCount ?? 0)
+            }
+            loading={statsLoading}
+          />
+        </div>
+      </section>
+
+      {/* Question sheets */}
+      <section className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="bg-primary/10 p-2 rounded-lg">
+              <FileQuestion className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <h2 className="text-xl md:text-2xl font-bold">
+                أوراق الأسئلة المستخرجة
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                ارفع صورة/PDF واحصل على الأسئلة مع إجاباتها ودليلها
+              </p>
+            </div>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setLocation("/sheets")}
+            className="gap-1"
+          >
+            عرض الكل
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+        </div>
+
+        {sheetsLoading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[1, 2, 3].map((i) => (
+              <Skeleton key={i} className="h-36 rounded-xl" />
+            ))}
+          </div>
+        ) : !sheets || sheets.length === 0 ? (
+          <Card className="border-dashed border-2 bg-muted/20">
+            <CardContent className="flex flex-col sm:flex-row items-center sm:justify-between gap-4 p-8">
+              <div className="text-center sm:text-right space-y-1">
+                <h3 className="font-semibold">لم ترفع أي ورقة أسئلة بعد</h3>
+                <p className="text-sm text-muted-foreground">
+                  جرّب رفع صورة لورقة امتحان أو واجب وسنتولى الباقي.
+                </p>
+              </div>
+              <Button onClick={() => setLocation("/upload?mode=sheet")} className="gap-2 shrink-0">
+                <ImageIcon className="h-4 w-4" />
+                رفع ورقة أسئلة
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <motion.div
+            variants={container}
+            initial="hidden"
+            animate="show"
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
+          >
+            {sheets.slice(0, 6).map((sheet) => (
+              <motion.div key={sheet.id} variants={item}>
+                <Card className="h-full flex flex-col group hover:border-primary/40 hover:shadow-lg transition-all">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <div className="bg-primary/10 p-1.5 rounded-md">
+                          {sheet.sourceType === "image" ? (
+                            <ImageIcon className="h-4 w-4 text-primary" />
+                          ) : (
+                            <FileText className="h-4 w-4 text-primary" />
+                          )}
+                        </div>
+                        <Badge variant="outline" className="text-[10px]">
+                          {sheet.sourceType === "image" ? "صورة" : "PDF"}
+                        </Badge>
+                      </div>
+                      <DeleteButton
+                        title="هل تريد حذف ورقة الأسئلة؟"
+                        description={`سيتم حذف "${sheet.title}" وجميع الأسئلة المستخرجة منها.`}
+                        onConfirm={() => deleteSheet.mutate({ id: sheet.id })}
+                      />
+                    </div>
+                    <CardTitle className="text-base line-clamp-2 leading-tight mt-2">
+                      <Link
+                        href={`/sheets/${sheet.id}`}
+                        className="hover:text-primary transition-colors"
+                      >
+                        {sheet.title}
+                      </Link>
+                    </CardTitle>
+                    <CardDescription className="text-[11px]">
+                      {format(new Date(sheet.createdAt), "dd MMM yyyy", {
+                        locale: ar,
+                      })}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-0 mt-auto">
+                    <SheetStatusButton sheet={sheet} />
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ))}
+          </motion.div>
+        )}
+      </section>
+
+      {/* Documents + recent questions */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Main Content - Documents */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="lg:col-span-2 space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-bold text-foreground">مكتبتي</h2>
-            <Button onClick={() => setLocation("/upload")} className="gap-2">
+            <div className="flex items-center gap-3">
+              <div className="bg-primary/10 p-2 rounded-lg">
+                <Library className="h-5 w-5 text-primary" />
+              </div>
+              <h2 className="text-xl md:text-2xl font-bold">مكتبتي</h2>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setLocation("/upload")}
+              className="gap-2"
+            >
               <UploadCloud className="h-4 w-4" />
-              رفع مستند جديد
+              رفع مستند
             </Button>
           </div>
 
           {docsLoading ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {[1, 2, 3, 4].map((i) => (
-                <Card key={i} className="overflow-hidden">
-                  <CardHeader className="space-y-2">
-                    <Skeleton className="h-5 w-3/4" />
-                    <Skeleton className="h-4 w-1/2" />
-                  </CardHeader>
-                  <CardContent>
-                    <Skeleton className="h-10 w-full" />
-                  </CardContent>
-                </Card>
+                <Skeleton key={i} className="h-40 rounded-xl" />
               ))}
             </div>
-          ) : documents?.length === 0 ? (
-            <Card className="border-dashed border-2 bg-muted/30">
+          ) : !documents || documents.length === 0 ? (
+            <Card className="border-dashed border-2 bg-muted/20">
               <CardContent className="flex flex-col items-center justify-center p-12 text-center space-y-4">
                 <div className="bg-primary/10 p-4 rounded-full">
                   <BookOpen className="h-8 w-8 text-primary" />
                 </div>
                 <div className="space-y-2">
                   <h3 className="text-xl font-semibold">مكتبتك فارغة حالياً</h3>
-                  <p className="text-muted-foreground max-w-md">
-                    قم برفع كتاب، مذكرة، أو أي مادة دراسية بصيغة PDF لتبدأ في طرح الأسئلة واستخراج المعلومات.
+                  <p className="text-muted-foreground max-w-md text-sm">
+                    قم برفع كتاب أو مذكرة بصيغة PDF لتبدأ في طرح الأسئلة.
                   </p>
                 </div>
-                <Button size="lg" onClick={() => setLocation("/upload")} className="mt-4 gap-2">
+                <Button
+                  size="lg"
+                  onClick={() => setLocation("/upload")}
+                  className="mt-2 gap-2"
+                >
                   <UploadCloud className="h-5 w-5" />
                   رفع أول مستند
                 </Button>
               </CardContent>
             </Card>
           ) : (
-            <motion.div 
+            <motion.div
               variants={container}
               initial="hidden"
               animate="show"
               className="grid grid-cols-1 sm:grid-cols-2 gap-4"
             >
-              {documents?.map((doc) => (
+              {documents.map((doc) => (
                 <motion.div key={doc.id} variants={item}>
-                  <Card className="h-full flex flex-col hover-elevate transition-all border border-border/50 hover:border-primary/30">
+                  <Card className="h-full flex flex-col hover:border-primary/40 hover:shadow-lg transition-all">
                     <CardHeader className="flex-1">
                       <div className="flex justify-between items-start gap-2">
                         <div>
                           <CardTitle className="line-clamp-2 leading-tight text-lg mb-2">
-                            <Link href={`/documents/${doc.id}`} className="hover:text-primary transition-colors">
+                            <Link
+                              href={`/documents/${doc.id}`}
+                              className="hover:text-primary transition-colors"
+                            >
                               {doc.title}
                             </Link>
                           </CardTitle>
                           <CardDescription className="flex items-center gap-2 text-xs">
-                            <span>{format(new Date(doc.createdAt), "dd MMMM yyyy", { locale: ar })}</span>
+                            <span>
+                              {format(new Date(doc.createdAt), "dd MMM yyyy", {
+                                locale: ar,
+                              })}
+                            </span>
                             <span>•</span>
                             <span>{doc.totalPages} صفحة</span>
                           </CardDescription>
                         </div>
-                        
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 -mt-1 -mr-2 shrink-0">
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>هل أنت متأكد من حذف هذا المستند؟</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                سيتم حذف المستند "{doc.title}" وجميع الأسئلة والإجابات المرتبطة به نهائياً. لا يمكن التراجع عن هذا الإجراء.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter className="flex-row-reverse sm:justify-start gap-2">
-                              <AlertDialogCancel className="mt-0">إلغاء</AlertDialogCancel>
-                              <AlertDialogAction 
-                                onClick={() => deleteDoc.mutate({ id: doc.id })}
-                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                              >
-                                حذف المستند
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
+                        <DeleteButton
+                          title="هل تريد حذف هذا المستند؟"
+                          description={`سيتم حذف "${doc.title}" وجميع الأسئلة المرتبطة به نهائياً.`}
+                          onConfirm={() => deleteDoc.mutate({ id: doc.id })}
+                        />
                       </div>
                     </CardHeader>
                     <CardContent className="pt-0">
@@ -200,13 +370,27 @@ export function Home() {
                           <span>فشل في المعالجة</span>
                         </div>
                       ) : (
-                        <Button 
-                          variant={doc.status === "processing" ? "secondary" : "default"} 
-                          className="w-full"
+                        <Button
+                          variant={
+                            doc.status === "processing"
+                              ? "secondary"
+                              : "default"
+                          }
+                          className="w-full gap-2"
                           asChild
                         >
                           <Link href={`/documents/${doc.id}`}>
-                            {doc.status === "processing" ? "جاري المذاكرة..." : "تصفح المستند"}
+                            {doc.status === "processing" ? (
+                              <>
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                جاري المعالجة...
+                              </>
+                            ) : (
+                              <>
+                                تصفح المستند
+                                <ArrowLeft className="h-4 w-4" />
+                              </>
+                            )}
                           </Link>
                         </Button>
                       )}
@@ -218,14 +402,15 @@ export function Home() {
           )}
         </div>
 
-        {/* Sidebar - Recent Questions */}
-        <div className="space-y-6">
-          <div className="flex items-center gap-2">
-            <Clock className="h-5 w-5 text-muted-foreground" />
-            <h2 className="text-xl font-bold text-foreground">أحدث الأسئلة</h2>
+        <div className="space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="bg-primary/10 p-2 rounded-lg">
+              <Clock className="h-5 w-5 text-primary" />
+            </div>
+            <h2 className="text-xl font-bold">أحدث الأسئلة</h2>
           </div>
 
-          <Card className="border-border/50 bg-card/50">
+          <Card className="border-border/60">
             <CardContent className="p-0">
               {recentLoading ? (
                 <div className="p-4 space-y-4">
@@ -236,24 +421,30 @@ export function Home() {
                     </div>
                   ))}
                 </div>
-              ) : recentQuestions?.length === 0 ? (
+              ) : !recentQuestions || recentQuestions.length === 0 ? (
                 <div className="p-8 text-center text-sm text-muted-foreground">
-                  لم يتم طرح أي أسئلة بعد.
+                  لم يُطرح أي سؤال بعد.
                 </div>
               ) : (
-                <div className="divide-y divide-border/50">
-                  {recentQuestions?.map((q) => (
-                    <Link 
-                      key={q.id} 
+                <div className="divide-y divide-border/60">
+                  {recentQuestions.map((q) => (
+                    <Link
+                      key={q.id}
                       href={`/documents/${q.documentId}`}
-                      className="block p-4 hover:bg-muted/50 transition-colors group"
+                      className="block p-4 hover:bg-muted/40 transition-colors group"
                     >
                       <p className="font-medium text-sm line-clamp-2 mb-2 group-hover:text-primary transition-colors">
                         "{q.question}"
                       </p>
                       <div className="flex items-center justify-between text-xs text-muted-foreground">
-                        <span className="line-clamp-1 flex-1 ml-2">{q.documentTitle}</span>
-                        <span className="shrink-0">{format(new Date(q.createdAt), "dd MMM", { locale: ar })}</span>
+                        <span className="line-clamp-1 flex-1 ml-2">
+                          {q.documentTitle}
+                        </span>
+                        <span className="shrink-0">
+                          {format(new Date(q.createdAt), "dd MMM", {
+                            locale: ar,
+                          })}
+                        </span>
                       </div>
                     </Link>
                   ))}
@@ -264,5 +455,111 @@ export function Home() {
         </div>
       </div>
     </div>
+  );
+}
+
+function StatCard({
+  icon: Icon,
+  label,
+  value,
+  loading,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: number | undefined;
+  loading: boolean;
+}) {
+  return (
+    <Card className="overflow-hidden border-border/60 bg-card/70 hover:border-primary/30 transition-colors">
+      <CardContent className="p-4 md:p-5 flex items-center gap-3">
+        <div className="bg-primary/10 p-2.5 rounded-lg shrink-0">
+          <Icon className="h-5 w-5 text-primary" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-xs font-medium text-muted-foreground line-clamp-1">
+            {label}
+          </p>
+          {loading ? (
+            <Skeleton className="h-7 w-12 mt-1" />
+          ) : (
+            <h3 className="text-2xl font-extrabold tabular-nums">
+              {value ?? 0}
+            </h3>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function SheetStatusButton({
+  sheet,
+}: {
+  sheet: { id: number; status: string; questionCount: number };
+}) {
+  if (sheet.status === "failed") {
+    return (
+      <div className="flex items-center gap-2 text-xs text-destructive bg-destructive/10 p-2 rounded-md">
+        <AlertCircle className="h-3.5 w-3.5" />
+        <span>فشل الاستخراج</span>
+      </div>
+    );
+  }
+  if (sheet.status === "processing") {
+    return (
+      <Button variant="secondary" className="w-full gap-2" asChild>
+        <Link href={`/sheets/${sheet.id}`}>
+          <Loader2 className="h-4 w-4 animate-spin" />
+          جاري الاستخراج…
+        </Link>
+      </Button>
+    );
+  }
+  return (
+    <Button className="w-full gap-2" asChild>
+      <Link href={`/sheets/${sheet.id}`}>
+        عرض ({sheet.questionCount} سؤال)
+        <ArrowLeft className="h-4 w-4" />
+      </Link>
+    </Button>
+  );
+}
+
+function DeleteButton({
+  title,
+  description,
+  onConfirm,
+}: {
+  title: string;
+  description: string;
+  onConfirm: () => void;
+}) {
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 -mt-1 -mr-2 shrink-0"
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{title}</AlertDialogTitle>
+          <AlertDialogDescription>{description}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter className="flex-row-reverse sm:justify-start gap-2">
+          <AlertDialogCancel className="mt-0">إلغاء</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={onConfirm}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            حذف
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }

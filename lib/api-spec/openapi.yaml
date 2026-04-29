@@ -1,0 +1,332 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: API specification
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: documents
+    description: Document upload, listing, and management
+  - name: questions
+    description: Asking questions about uploaded documents
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+  /stats:
+    get:
+      operationId: getStats
+      tags: [documents]
+      summary: Get aggregate stats across the library
+      responses:
+        "200":
+          description: Stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LibraryStats"
+  /documents:
+    get:
+      operationId: listDocuments
+      tags: [documents]
+      summary: List all uploaded documents
+      responses:
+        "200":
+          description: List of documents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Document"
+  /documents/{id}:
+    get:
+      operationId: getDocument
+      tags: [documents]
+      summary: Get one document
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Document
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Document"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    delete:
+      operationId: deleteDocument
+      tags: [documents]
+      summary: Delete a document and all related data
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /documents/{id}/pages/{pageNumber}:
+    get:
+      operationId: getDocumentPage
+      tags: [documents]
+      summary: Get the text content of a single page
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: pageNumber
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Page content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentPage"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /documents/{id}/questions:
+    get:
+      operationId: listDocumentQuestions
+      tags: [questions]
+      summary: List previous questions asked about this document
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Questions for this document
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/QuestionRecord"
+    post:
+      operationId: askDocumentQuestion
+      tags: [questions]
+      summary: Ask a question and get an AI-generated answer with citations
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AskQuestionBody"
+      responses:
+        "200":
+          description: Answer with citations
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuestionRecord"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /documents/recent-questions:
+    get:
+      operationId: listRecentQuestions
+      tags: [questions]
+      summary: Recent questions across all documents
+      responses:
+        "200":
+          description: Recent questions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RecentQuestion"
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+    ApiError:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+    Document:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        filename:
+          type: string
+        totalPages:
+          type: integer
+        status:
+          type: string
+          enum: [processing, ready, failed]
+        errorMessage:
+          type: ["string", "null"]
+        questionCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - title
+        - filename
+        - totalPages
+        - status
+        - errorMessage
+        - questionCount
+        - createdAt
+    DocumentPage:
+      type: object
+      properties:
+        documentId:
+          type: integer
+        pageNumber:
+          type: integer
+        content:
+          type: string
+      required:
+        - documentId
+        - pageNumber
+        - content
+    Citation:
+      type: object
+      properties:
+        pageNumber:
+          type: integer
+        quote:
+          type: string
+      required:
+        - pageNumber
+        - quote
+    AskQuestionBody:
+      type: object
+      properties:
+        question:
+          type: string
+          minLength: 1
+      required:
+        - question
+    QuestionRecord:
+      type: object
+      properties:
+        id:
+          type: integer
+        documentId:
+          type: integer
+        question:
+          type: string
+        answer:
+          type: string
+        citations:
+          type: array
+          items:
+            $ref: "#/components/schemas/Citation"
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - documentId
+        - question
+        - answer
+        - citations
+        - createdAt
+    RecentQuestion:
+      type: object
+      properties:
+        id:
+          type: integer
+        documentId:
+          type: integer
+        documentTitle:
+          type: string
+        question:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - documentId
+        - documentTitle
+        - question
+        - createdAt
+    LibraryStats:
+      type: object
+      properties:
+        documentCount:
+          type: integer
+        readyDocumentCount:
+          type: integer
+        processingDocumentCount:
+          type: integer
+        totalPages:
+          type: integer
+        totalQuestions:
+          type: integer
+      required:
+        - documentCount
+        - readyDocumentCount
+        - processingDocumentCount
+        - totalPages
+        - totalQuestions

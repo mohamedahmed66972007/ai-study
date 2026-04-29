@@ -7,6 +7,9 @@
  */
 
 export interface Citation {
+  /** PDF page index (1-based, used to navigate the source viewer). */
   pageNumber: number;
+  /** Printed page label as shown in the document, when it differs from the PDF index. */
+  pageLabel?: string | null;
   quote: string;
 }

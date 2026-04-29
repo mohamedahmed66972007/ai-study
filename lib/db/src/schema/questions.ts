@@ -13,6 +13,7 @@ import { documentsTable } from "./documents";
 
 export type StoredCitation = {
   pageNumber: number;
+  pageLabel?: string | null;
   quote: string;
 };
 

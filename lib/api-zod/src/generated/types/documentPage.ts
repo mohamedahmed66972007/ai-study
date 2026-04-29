@@ -9,5 +9,7 @@
 export interface DocumentPage {
   documentId: number;
   pageNumber: number;
+  /** Printed page label (may differ from the PDF index). Null when not provided by the PDF. */
+  pageLabel?: string | null;
   content: string;
 }

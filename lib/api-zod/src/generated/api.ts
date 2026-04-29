@@ -77,6 +77,12 @@ export const GetDocumentPageParams = zod.object({
 export const GetDocumentPageResponse = zod.object({
   documentId: zod.number(),
   pageNumber: zod.number(),
+  pageLabel: zod
+    .string()
+    .nullish()
+    .describe(
+      "Printed page label (may differ from the PDF index). Null when not provided by the PDF.",
+    ),
   content: zod.string(),
 });
 
@@ -94,7 +100,17 @@ export const ListDocumentQuestionsResponseItem = zod.object({
   answer: zod.string(),
   citations: zod.array(
     zod.object({
-      pageNumber: zod.number(),
+      pageNumber: zod
+        .number()
+        .describe(
+          "PDF page index (1-based, used to navigate the source viewer).",
+        ),
+      pageLabel: zod
+        .string()
+        .nullish()
+        .describe(
+          "Printed page label as shown in the document, when it differs from the PDF index.",
+        ),
       quote: zod.string(),
     }),
   ),
@@ -122,7 +138,17 @@ export const AskDocumentQuestionResponse = zod.object({
   answer: zod.string(),
   citations: zod.array(
     zod.object({
-      pageNumber: zod.number(),
+      pageNumber: zod
+        .number()
+        .describe(
+          "PDF page index (1-based, used to navigate the source viewer).",
+        ),
+      pageLabel: zod
+        .string()
+        .nullish()
+        .describe(
+          "Printed page label as shown in the document, when it differs from the PDF index.",
+        ),
       quote: zod.string(),
     }),
   ),

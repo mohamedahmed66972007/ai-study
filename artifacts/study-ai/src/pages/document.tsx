@@ -58,7 +58,10 @@ export function Document() {
   const queryClient = useQueryClient();
   
   const [question, setQuestion] = useState("");
-  const [activePage, setActivePage] = useState<number | null>(null);
+  const [activePage, setActivePage] = useState<{
+    pageNumber: number;
+    pageLabel: string | null;
+  } | null>(null);
   const [isMobileSourceOpen, setIsMobileSourceOpen] = useState(false);
   const [imageDialogOpen, setImageDialogOpen] = useState(false);
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -103,8 +106,11 @@ export function Document() {
     askQuestion.mutate({ id, data: { question: question.trim() } });
   };
 
-  const handleCitationClick = (pageNumber: number) => {
-    setActivePage(pageNumber);
+  const handleCitationClick = (
+    pageNumber: number,
+    pageLabel: string | null,
+  ) => {
+    setActivePage({ pageNumber, pageLabel });
     setIsMobileSourceOpen(true);
   };
 
@@ -163,12 +169,55 @@ export function Document() {
     }
   };
 
-  // Auto-scroll to bottom of questions when new one arrives
+  // We anchor the most recent Q&A to the top of the chat viewport so the
+  // user can always see what they asked while the answer streams in below.
+  // We do this by tracking the latest "anchor" element (either the in-flight
+  // question while pending, or the most recently saved one) and scrolling it
+  // into view at the top of the scroll container.
+  const anchorRef = useRef<HTMLDivElement | null>(null);
+  const lastAnchoredKeyRef = useRef<string | null>(null);
+  const previousQuestionCountRef = useRef<number>(0);
+
+  // Initial load: jump to the bottom (most recent first-time view).
   useEffect(() => {
-    if (scrollRef.current) {
+    if (
+      scrollRef.current &&
+      questions &&
+      previousQuestionCountRef.current === 0 &&
+      questions.length > 0
+    ) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      previousQuestionCountRef.current = questions.length;
     }
-  }, [questions, askQuestion.isPending]);
+  }, [questions]);
+
+  // Whenever the anchor (latest pending/persisted Q) changes, scroll it to
+  // the top of the chat area. The bottom spacer (added below) gives enough
+  // room for the answer to grow without the question being pushed away.
+  useEffect(() => {
+    const anchorKey = askQuestion.isPending
+      ? `pending:${askQuestion.variables?.data.question ?? ""}`
+      : questions && questions.length > 0
+        ? `q:${questions[0]!.id}`
+        : null;
+
+    if (
+      anchorKey &&
+      anchorKey !== lastAnchoredKeyRef.current &&
+      anchorRef.current &&
+      scrollRef.current
+    ) {
+      const container = scrollRef.current;
+      const target = anchorRef.current;
+      const offset = target.offsetTop - container.offsetTop - 8;
+      container.scrollTo({ top: offset, behavior: "smooth" });
+      lastAnchoredKeyRef.current = anchorKey;
+    }
+
+    if (questions) {
+      previousQuestionCountRef.current = questions.length;
+    }
+  }, [questions, askQuestion.isPending, askQuestion.variables?.data.question]);
 
   if (docLoading) {
     return (
@@ -274,91 +323,157 @@ export function Document() {
                </p>
              </div>
           ) : (
-            <div className="space-y-8 max-w-3xl mx-auto pb-4">
-              {questions?.map((q) => (
-                <motion.div 
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  key={q.id} 
-                  className="space-y-4"
-                >
-                  {/* User Question */}
-                  <div className="flex items-start gap-4">
-                    <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center shrink-0 mt-1">
-                      <span className="font-semibold text-sm">أنا</span>
-                    </div>
-                    <div className="bg-secondary/50 rounded-2xl rounded-tr-sm px-5 py-3 text-sm font-medium leading-relaxed">
-                      {q.question}
-                    </div>
-                  </div>
-
-                  {/* AI Answer */}
-                  <div className="flex items-start gap-4 mr-4">
-                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-1">
-                      <BookOpen className="h-4 w-4 text-primary" />
-                    </div>
-                    <div className="space-y-4 flex-1">
-                      <div className="bg-background border shadow-sm rounded-2xl rounded-tl-sm px-5 py-4 text-sm leading-relaxed whitespace-pre-wrap">
-                        {q.answer}
-                      </div>
-                      
-                      {/* Citations */}
-                      {q.citations && q.citations.length > 0 && (
-                        <div className="space-y-2">
-                          <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
-                            <FileText className="h-3 w-3" />
-                            المصادر / الأدلة
-                          </p>
-                          <div className="flex flex-wrap gap-2">
-                            {q.citations.map((cite, idx) => (
-                              <button
-                                key={idx}
-                                onClick={() => handleCitationClick(cite.pageNumber)}
-                                className={`text-right group flex flex-col gap-1.5 bg-muted/30 hover:bg-primary/5 border hover:border-primary/30 p-2.5 rounded-lg transition-colors w-full sm:w-[calc(50%-0.25rem)] ${activePage === cite.pageNumber ? "border-primary bg-primary/5" : ""}`}
-                              >
-                                <Badge variant="secondary" className="w-fit text-[10px] py-0 h-5 bg-background">صفحة {cite.pageNumber}</Badge>
-                                <p className="text-xs text-muted-foreground line-clamp-2 group-hover:text-foreground transition-colors italic">"{cite.quote}"</p>
-                              </button>
-                            ))}
+            (() => {
+              // The API returns questions newest-first. Render them in
+              // chat-style order (oldest first, newest at the bottom near the
+              // input) and put the in-flight pending Q&A right after.
+              const ordered = questions ? [...questions].reverse() : [];
+              // The "latest" message is whichever is at the bottom: the
+              // pending one if present, otherwise the most recent persisted
+              // question. We attach `anchorRef` to it so we can scroll it to
+              // the top of the viewport (see useEffect above).
+              const latestPersistedIndex = ordered.length - 1;
+              const pendingIsLatest = askQuestion.isPending;
+              return (
+                <div className="space-y-8 max-w-3xl mx-auto pb-4">
+                  {ordered.map((q, idx) => {
+                    const isLatest =
+                      !pendingIsLatest && idx === latestPersistedIndex;
+                    return (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        key={q.id}
+                        ref={isLatest ? anchorRef : undefined}
+                        className="space-y-4 scroll-mt-4"
+                      >
+                        {/* User Question */}
+                        <div className="flex items-start gap-4">
+                          <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center shrink-0 mt-1">
+                            <span className="font-semibold text-sm">أنا</span>
+                          </div>
+                          <div className="bg-secondary/50 rounded-2xl rounded-tr-sm px-5 py-3 text-sm font-medium leading-relaxed">
+                            {q.question}
                           </div>
                         </div>
-                      )}
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
 
-              {/* Pending state */}
-              {askQuestion.isPending && (
-                <motion.div 
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="space-y-4"
-                >
-                  <div className="flex items-start gap-4">
-                    <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center shrink-0 mt-1">
-                      <span className="font-semibold text-sm">أنا</span>
-                    </div>
-                    <div className="bg-secondary/50 rounded-2xl rounded-tr-sm px-5 py-3 text-sm font-medium leading-relaxed">
-                      {askQuestion.variables?.data.question}
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-4 mr-4">
-                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-1">
-                      <BookOpen className="h-4 w-4 text-primary" />
-                    </div>
-                    <div className="bg-background border shadow-sm rounded-2xl rounded-tl-sm px-5 py-4 flex items-center gap-2">
-                      <span className="flex gap-1">
-                        <span className="w-1.5 h-1.5 bg-primary/50 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                        <span className="w-1.5 h-1.5 bg-primary/50 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                        <span className="w-1.5 h-1.5 bg-primary/50 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
-                      </span>
-                      <span className="text-sm text-muted-foreground ml-2">يبحث في المستند...</span>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-            </div>
+                        {/* AI Answer */}
+                        <div className="flex items-start gap-4 mr-4">
+                          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-1">
+                            <BookOpen className="h-4 w-4 text-primary" />
+                          </div>
+                          <div className="space-y-4 flex-1">
+                            <div className="bg-background border shadow-sm rounded-2xl rounded-tl-sm px-5 py-4 text-sm leading-relaxed whitespace-pre-wrap">
+                              {q.answer}
+                            </div>
+
+                            {/* Citations */}
+                            {q.citations && q.citations.length > 0 && (
+                              <div className="space-y-2">
+                                <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                                  <FileText className="h-3 w-3" />
+                                  المصادر / الأدلة
+                                </p>
+                                <div className="flex flex-wrap gap-2">
+                                  {q.citations.map((cite, idx) => {
+                                    const label = cite.pageLabel ?? null;
+                                    const isActive =
+                                      activePage?.pageNumber ===
+                                      cite.pageNumber;
+                                    return (
+                                      <button
+                                        key={idx}
+                                        onClick={() =>
+                                          handleCitationClick(
+                                            cite.pageNumber,
+                                            label,
+                                          )
+                                        }
+                                        className={`text-right group flex flex-col gap-1.5 bg-muted/30 hover:bg-primary/5 border hover:border-primary/30 p-2.5 rounded-lg transition-colors w-full sm:w-[calc(50%-0.25rem)] ${isActive ? "border-primary bg-primary/5" : ""}`}
+                                      >
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                          <Badge
+                                            variant="secondary"
+                                            className="w-fit text-[10px] py-0 h-5 bg-background"
+                                          >
+                                            صفحة {cite.pageNumber}
+                                          </Badge>
+                                          {label &&
+                                            label !==
+                                              String(cite.pageNumber) && (
+                                              <Badge
+                                                variant="outline"
+                                                className="w-fit text-[10px] py-0 h-5"
+                                                title="الرقم المطبوع داخل الصفحة"
+                                              >
+                                                مطبوع: {label}
+                                              </Badge>
+                                            )}
+                                        </div>
+                                        <p className="text-xs text-muted-foreground line-clamp-2 group-hover:text-foreground transition-colors italic">
+                                          "{cite.quote}"
+                                        </p>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+
+                  {/* Pending state */}
+                  {askQuestion.isPending && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      ref={anchorRef}
+                      className="space-y-4 scroll-mt-4"
+                    >
+                      <div className="flex items-start gap-4">
+                        <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center shrink-0 mt-1">
+                          <span className="font-semibold text-sm">أنا</span>
+                        </div>
+                        <div className="bg-secondary/50 rounded-2xl rounded-tr-sm px-5 py-3 text-sm font-medium leading-relaxed">
+                          {askQuestion.variables?.data.question}
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-4 mr-4">
+                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-1">
+                          <BookOpen className="h-4 w-4 text-primary" />
+                        </div>
+                        <div className="bg-background border shadow-sm rounded-2xl rounded-tl-sm px-5 py-4 flex items-center gap-2">
+                          <span className="flex gap-1">
+                            <span
+                              className="w-1.5 h-1.5 bg-primary/50 rounded-full animate-bounce"
+                              style={{ animationDelay: "0ms" }}
+                            ></span>
+                            <span
+                              className="w-1.5 h-1.5 bg-primary/50 rounded-full animate-bounce"
+                              style={{ animationDelay: "150ms" }}
+                            ></span>
+                            <span
+                              className="w-1.5 h-1.5 bg-primary/50 rounded-full animate-bounce"
+                              style={{ animationDelay: "300ms" }}
+                            ></span>
+                          </span>
+                          <span className="text-sm text-muted-foreground ml-2">
+                            يبحث في المستند...
+                          </span>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {/* Spacer so the latest message can be anchored to the top
+                      of the viewport (mirrors ChatGPT-style behaviour). */}
+                  <div aria-hidden className="min-h-[55vh]" />
+                </div>
+              );
+            })()
           )}
         </div>
 
@@ -475,20 +590,39 @@ export function Document() {
 
       {/* Right Pane - Source Viewer (Desktop) */}
       <div className="hidden md:flex w-[400px] lg:w-[500px] flex-col bg-muted/10 shrink-0">
-        <SourceViewer documentId={id} pageNumber={activePage} />
+        <SourceViewer
+          documentId={id}
+          pageNumber={activePage?.pageNumber ?? null}
+          pageLabel={activePage?.pageLabel ?? null}
+        />
       </div>
 
       {/* Mobile Source Viewer Sheet */}
       <Sheet open={isMobileSourceOpen} onOpenChange={setIsMobileSourceOpen}>
         <SheetContent side="bottom" className="h-[80vh] p-0 flex flex-col rounded-t-xl">
-          <SourceViewer documentId={id} pageNumber={activePage} onClose={() => setIsMobileSourceOpen(false)} />
+          <SourceViewer
+            documentId={id}
+            pageNumber={activePage?.pageNumber ?? null}
+            pageLabel={activePage?.pageLabel ?? null}
+            onClose={() => setIsMobileSourceOpen(false)}
+          />
         </SheetContent>
       </Sheet>
     </div>
   );
 }
 
-function SourceViewer({ documentId, pageNumber, onClose }: { documentId: number, pageNumber: number | null, onClose?: () => void }) {
+function SourceViewer({
+  documentId,
+  pageNumber,
+  pageLabel,
+  onClose,
+}: {
+  documentId: number;
+  pageNumber: number | null;
+  pageLabel?: string | null;
+  onClose?: () => void;
+}) {
   const [mode, setMode] = useState<"image" | "text">("image");
   const [pdfError, setPdfError] = useState(false);
   const [containerWidth, setContainerWidth] = useState(0);
@@ -525,7 +659,20 @@ function SourceViewer({ documentId, pageNumber, onClose }: { documentId: number,
           <BookOpen className="h-4 w-4 text-primary shrink-0" />
           <h3 className="font-semibold text-sm">المصدر</h3>
           {pageNumber && (
-            <Badge variant="secondary" className="text-xs">صفحة {pageNumber}</Badge>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <Badge variant="secondary" className="text-xs">
+                صفحة {pageNumber}
+              </Badge>
+              {pageLabel && pageLabel !== String(pageNumber) && (
+                <Badge
+                  variant="outline"
+                  className="text-[10px] py-0 h-5"
+                  title="الرقم المطبوع داخل الصفحة"
+                >
+                  مطبوع: {pageLabel}
+                </Badge>
+              )}
+            </div>
           )}
         </div>
         <div className="flex items-center gap-1">

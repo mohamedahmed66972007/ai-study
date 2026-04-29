@@ -27,7 +27,7 @@ try {
 
 export interface ExtractedPdf {
   totalPages: number;
-  pages: { pageNumber: number; content: string }[];
+  pages: { pageNumber: number; pageLabel: string | null; content: string }[];
 }
 
 function normalizeText(text: string): string {
@@ -46,6 +46,20 @@ export async function extractPdfPages(buffer: Buffer): Promise<ExtractedPdf> {
   const pdf = await loadingTask.promise;
   const totalPages = pdf.numPages;
   const pages: ExtractedPdf["pages"] = [];
+
+  // Printed page labels (e.g. "21" while pdf index is 26). Returns null for
+  // PDFs that don't define labels, in which case we fall back to the index.
+  let pageLabels: (string | null)[] | null = null;
+  try {
+    const raw = await pdf.getPageLabels();
+    if (Array.isArray(raw) && raw.length === totalPages) {
+      pageLabels = raw.map((l) =>
+        typeof l === "string" && l.trim().length > 0 ? l.trim() : null,
+      );
+    }
+  } catch {
+    pageLabels = null;
+  }
 
   for (let i = 1; i <= totalPages; i++) {
     const page = await pdf.getPage(i);
@@ -126,7 +140,12 @@ export async function extractPdfPages(buffer: Buffer): Promise<ExtractedPdf> {
     }
 
     const content = normalizeText(lines.join("\n"));
-    pages.push({ pageNumber: i, content });
+    const rawLabel = pageLabels?.[i - 1] ?? null;
+    // Only keep the label if it differs from the PDF index (otherwise it's
+    // redundant and would just clutter the UI).
+    const pageLabel =
+      rawLabel && rawLabel !== String(i) ? rawLabel : null;
+    pages.push({ pageNumber: i, pageLabel, content });
     page.cleanup();
   }
 

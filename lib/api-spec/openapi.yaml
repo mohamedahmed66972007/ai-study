@@ -286,6 +286,10 @@ components:
           type: integer
         pageNumber:
           type: integer
+        pageLabel:
+          type: string
+          nullable: true
+          description: Printed page label (may differ from the PDF index). Null when not provided by the PDF.
         content:
           type: string
       required:
@@ -297,6 +301,11 @@ components:
       properties:
         pageNumber:
           type: integer
+          description: PDF page index (1-based, used to navigate the source viewer).
+        pageLabel:
+          type: string
+          nullable: true
+          description: Printed page label as shown in the document, when it differs from the PDF index.
         quote:
           type: string
       required:

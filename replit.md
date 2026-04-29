@@ -79,8 +79,8 @@ sun/moon toggle and a palette dropdown with color swatches.
 ## Data model
 
 - `documents` (id, title, filename, total_pages, status `processing|ready|failed`, error_message, file_data bytea, created_at)
-- `document_pages` (id, document_id, page_number, content) — extracted per-page text
-- `questions` (id, document_id, question, answer, citations jsonb, created_at)
+- `document_pages` (id, document_id, page_number, page_label, content) — extracted per-page text. `page_label` is the printed page label parsed from the PDF (e.g. roman numerals, or a number that differs from the PDF index); null when the PDF doesn't provide one or when it matches the PDF index.
+- `questions` (id, document_id, question, answer, citations jsonb, created_at). Each citation stores `{ pageNumber, pageLabel?, quote }` — `pageNumber` is the PDF index used for navigation, `pageLabel` (when present) is the printed label shown alongside it in the UI.
 
 ## AI strategy
 

@@ -44,6 +44,7 @@ export const documentPagesTable = pgTable(
       .notNull()
       .references(() => documentsTable.id, { onDelete: "cascade" }),
     pageNumber: integer("page_number").notNull(),
+    pageLabel: text("page_label"),
     content: text("content").notNull(),
   },
   (t) => ({

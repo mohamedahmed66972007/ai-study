@@ -142,6 +142,7 @@ router.post(
             pages.map((p) => ({
               documentId: created.id,
               pageNumber: p.pageNumber,
+              pageLabel: p.pageLabel,
               content: p.content,
             })),
           );
@@ -252,6 +253,7 @@ router.get(
     res.json({
       documentId: page.documentId,
       pageNumber: page.pageNumber,
+      pageLabel: page.pageLabel ?? null,
       content: page.content,
     });
   },

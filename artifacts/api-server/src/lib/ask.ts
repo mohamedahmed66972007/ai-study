@@ -20,7 +20,10 @@ function buildContext(pages: DocumentPageRow[]): string {
   const chunks: string[] = [];
   let total = 0;
   for (const p of sorted) {
-    const block = `\n===== صفحة ${p.pageNumber} =====\n${p.content}\n`;
+    const labelPart = p.pageLabel
+      ? ` (الرقم المطبوع في الصفحة: ${p.pageLabel})`
+      : "";
+    const block = `\n===== صفحة ${p.pageNumber}${labelPart} =====\n${p.content}\n`;
     if (total + block.length > MAX_CONTEXT_CHARS) {
       chunks.push(`\n[تم اقتطاع الباقي من المستند بسبب الطول]\n`);
       break;
@@ -31,19 +34,41 @@ function buildContext(pages: DocumentPageRow[]): string {
   return chunks.join("");
 }
 
-function filterValidCitations(
+function buildLabelMap(
+  pages: DocumentPageRow[],
+): Map<number, string | null> {
+  const map = new Map<number, string | null>();
+  for (const p of pages) {
+    map.set(p.pageNumber, p.pageLabel ?? null);
+  }
+  return map;
+}
+
+function buildCitations(
   raw: unknown,
-  validPageNumbers: Set<number>,
+  pageLabelByNumber: Map<number, string | null>,
 ): StoredCitation[] {
   if (!Array.isArray(raw)) return [];
-  return raw.filter(
-    (c): c is StoredCitation =>
-      !!c &&
-      typeof (c as StoredCitation).pageNumber === "number" &&
-      validPageNumbers.has((c as StoredCitation).pageNumber) &&
-      typeof (c as StoredCitation).quote === "string" &&
-      (c as StoredCitation).quote.trim().length > 0,
-  );
+  const out: StoredCitation[] = [];
+  for (const c of raw) {
+    if (!c || typeof c !== "object") continue;
+    const pageNumber = (c as { pageNumber?: unknown }).pageNumber;
+    const quote = (c as { quote?: unknown }).quote;
+    if (
+      typeof pageNumber !== "number" ||
+      !pageLabelByNumber.has(pageNumber) ||
+      typeof quote !== "string" ||
+      quote.trim().length === 0
+    ) {
+      continue;
+    }
+    out.push({
+      pageNumber,
+      pageLabel: pageLabelByNumber.get(pageNumber) ?? null,
+      quote,
+    });
+  }
+  return out;
 }
 
 export async function askDocument(args: {
@@ -63,6 +88,11 @@ export async function askDocument(args: {
 - اجعل الإجابة منظمة وواضحة، وقدّم خلاصة عملية تساعد الطالب على الفهم لا مجرد نسخ نص.
 - لا تخترع أرقام صفحات. لا تستشهد إلا بنص موجود فعلاً في المستند ضمن الصفحة المذكورة.
 - ردك يجب أن يكون JSON صالحًا فقط، بالحقلين: answer (نص الإجابة الكاملة)، citations (قائمة من العناصر بحقول pageNumber و quote).
+
+أرقام الصفحات في الاقتباسات (مهم جدًا):
+- كل صفحة في المستند معرّفة برقمين: رقم الصفحة في ملف الـ PDF (الترتيب الفعلي للصفحات في الملف، يبدأ من 1)، وقد يكون لها أيضًا "الرقم المطبوع في الصفحة" بين قوسين في رؤوس الصفحات أعلاه.
+- في حقل citations استخدم دائمًا رقم الـ PDF (الرقم الموجود بعد كلمة "صفحة" في رأس كل قسم) في الحقل pageNumber. لا تستخدم الرقم المطبوع.
+- داخل نص الإجابة (answer) أشِر إلى الصفحة بكلا الرقمين عند توفر الرقم المطبوع، بصيغة: "صفحة 26 (المرقّمة 21)" أو "(صفحة 26 / مطبوع 21)". إذا لم يكن للصفحة رقم مطبوع، اكتب "صفحة 26" فقط.
 
 التعامل مع الأسئلة الاختيارية (Multiple Choice):
 - اكتشف تلقائيًا إذا كان السؤال يحتوي على خيارات (مثل: أ/ب/ج/د، 1/2/3/4، A/B/C/D، أو خيارات منفصلة بأسطر أو فواصل، أو صياغات مثل "أي مما يلي" أو "اختر").
@@ -111,10 +141,10 @@ export async function askDocument(args: {
     throw new Error("AI response was not valid JSON");
   }
 
-  const validPageNumbers = new Set(pages.map((p) => p.pageNumber));
+  const labelMap = buildLabelMap(pages);
   return {
     answer: typeof parsed.answer === "string" ? parsed.answer : "",
-    citations: filterValidCitations(parsed.citations, validPageNumbers),
+    citations: buildCitations(parsed.citations, labelMap),
   };
 }
 
@@ -144,6 +174,11 @@ export async function extractAndAnswerFromImage(args: {
 - لا تخترع أرقام صفحات. لا تستشهد إلا بنص موجود فعلاً في الصفحة المذكورة.
 - لا تُكرّر السؤال داخل الإجابة (باستثناء الإشارة إلى رمز الخيار الصحيح).
 - ردك يجب أن يكون JSON صالحًا فقط بالحقل: questions (قائمة عناصر بحقول question (نص السؤال كما استخرج من الصورة، شاملًا الخيارات إن وُجدت)، answer (الإجابة الكاملة)، citations (قائمة عناصر بحقول pageNumber و quote)).
+
+أرقام الصفحات في الاقتباسات (مهم جدًا):
+- كل صفحة في المستند معرّفة برقمين: رقم الصفحة في ملف الـ PDF (الترتيب الفعلي يبدأ من 1)، وقد يكون لها أيضًا "الرقم المطبوع في الصفحة" بين قوسين في رؤوس الصفحات أعلاه.
+- في حقل citations استخدم دائمًا رقم الـ PDF (الرقم بعد كلمة "صفحة" في رأس كل قسم) في الحقل pageNumber. لا تستخدم الرقم المطبوع.
+- داخل نص الإجابة (answer) أشِر إلى الصفحة بكلا الرقمين عند توفر الرقم المطبوع، بصيغة: "صفحة 26 (المرقّمة 21)" أو "(صفحة 26 / مطبوع 21)". إذا لم يكن للصفحة رقم مطبوع، اكتب "صفحة 26" فقط.
 
 التعامل مع الأسئلة الاختيارية (Multiple Choice):
 - لكل سؤال اختياري، حدّد بوضوح في بداية الإجابة الخيار/الخيارات الصحيحة بصيغة: "الإجابة الصحيحة: أ" أو "الإجابات الصحيحة: ب، د" حسب عدد الإجابات الصحيحة.
@@ -214,7 +249,7 @@ export async function extractAndAnswerFromImage(args: {
 
   if (!Array.isArray(parsed.questions)) return [];
 
-  const validPageNumbers = new Set(pages.map((p) => p.pageNumber));
+  const labelMap = buildLabelMap(pages);
   const out: ExtractedAnsweredQuestion[] = [];
   for (const item of parsed.questions) {
     if (
@@ -230,9 +265,9 @@ export async function extractAndAnswerFromImage(args: {
     out.push({
       question: q,
       answer: a,
-      citations: filterValidCitations(
+      citations: buildCitations(
         (item as ExtractedAnsweredQuestion).citations,
-        validPageNumbers,
+        labelMap,
       ),
     });
   }

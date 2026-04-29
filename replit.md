@@ -52,3 +52,18 @@ For each question we pass the full document (page-marked, capped at 600k chars t
 - Codegen after editing the OpenAPI spec: `pnpm --filter @workspace/api-spec run codegen`
 - DB push: `pnpm --filter @workspace/db run push`
 - Typecheck everything: `pnpm run typecheck`
+
+## Replit dev / deploy setup
+
+- The `Start application` workflow runs `bash scripts/dev.sh`, which boots the
+  Express API on port 8080 and the Vite dev server on port 5000 in parallel.
+  Vite proxies `/api` → `http://localhost:8080` (see
+  `artifacts/study-ai/vite.config.ts`).
+- Required env vars: `DATABASE_URL` (Replit PostgreSQL),
+  `AI_INTEGRATIONS_GEMINI_BASE_URL`, `AI_INTEGRATIONS_GEMINI_API_KEY`
+  (Replit Gemini AI Integration).
+- Production deployment is autoscale: the build step builds the React app and
+  the API server, and the run step starts only the Express server. In
+  production the Express server serves the built React `dist/public` as static
+  files with SPA fallback (see `artifacts/api-server/src/app.ts`), so the
+  whole app runs on a single port.

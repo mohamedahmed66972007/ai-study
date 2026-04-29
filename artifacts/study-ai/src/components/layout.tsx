@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Sparkles, Library, FileQuestion, UploadCloud } from "lucide-react";
+import { Sparkles, Library, UploadCloud } from "lucide-react";
 import { ThemeModeToggle, ColorThemePicker } from "./theme-controls";
 import { cn } from "@/lib/utils";
 
@@ -59,9 +59,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <nav className="flex items-center gap-1">
             <NavLink href="/" icon={Library}>
               مكتبتي
-            </NavLink>
-            <NavLink href="/sheets" icon={FileQuestion}>
-              أوراق الأسئلة
             </NavLink>
             <NavLink href="/upload" icon={UploadCloud}>
               رفع جديد

@@ -24,8 +24,6 @@ export const GetStatsResponse = zod.object({
   processingDocumentCount: zod.number(),
   totalPages: zod.number(),
   totalQuestions: zod.number(),
-  questionSheetCount: zod.number(),
-  extractedQuestionCount: zod.number(),
 });
 
 /**
@@ -144,57 +142,3 @@ export const ListRecentQuestionsResponseItem = zod.object({
 export const ListRecentQuestionsResponse = zod.array(
   ListRecentQuestionsResponseItem,
 );
-
-/**
- * @summary List all uploaded question sheets
- */
-export const ListQuestionSheetsResponseItem = zod.object({
-  id: zod.number(),
-  title: zod.string(),
-  sourceType: zod.enum(["image", "pdf"]),
-  filename: zod.string(),
-  mimeType: zod.string(),
-  status: zod.enum(["processing", "ready", "failed"]),
-  errorMessage: zod.string().nullable(),
-  questionCount: zod.number(),
-  createdAt: zod.coerce.date(),
-});
-export const ListQuestionSheetsResponse = zod.array(
-  ListQuestionSheetsResponseItem,
-);
-
-/**
- * @summary Get a single question sheet with its extracted questions
- */
-export const GetQuestionSheetParams = zod.object({
-  id: zod.coerce.number(),
-});
-
-export const GetQuestionSheetResponse = zod.object({
-  id: zod.number(),
-  title: zod.string(),
-  sourceType: zod.enum(["image", "pdf"]),
-  filename: zod.string(),
-  mimeType: zod.string(),
-  status: zod.enum(["processing", "ready", "failed"]),
-  errorMessage: zod.string().nullable(),
-  questionCount: zod.number(),
-  createdAt: zod.coerce.date(),
-  questions: zod.array(
-    zod.object({
-      id: zod.number(),
-      sheetId: zod.number(),
-      questionNumber: zod.number(),
-      question: zod.string(),
-      answer: zod.string(),
-      explanation: zod.string(),
-    }),
-  ),
-});
-
-/**
- * @summary Delete a question sheet
- */
-export const DeleteQuestionSheetParams = zod.object({
-  id: zod.coerce.number(),
-});

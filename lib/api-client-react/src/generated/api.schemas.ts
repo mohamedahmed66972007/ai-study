@@ -73,76 +73,8 @@ export interface LibraryStats {
   processingDocumentCount: number;
   totalPages: number;
   totalQuestions: number;
-  questionSheetCount: number;
-  extractedQuestionCount: number;
 }
 
-export type QuestionSheetSourceType =
-  (typeof QuestionSheetSourceType)[keyof typeof QuestionSheetSourceType];
-
-export const QuestionSheetSourceType = {
-  image: "image",
-  pdf: "pdf",
-} as const;
-
-export type QuestionSheetStatus =
-  (typeof QuestionSheetStatus)[keyof typeof QuestionSheetStatus];
-
-export const QuestionSheetStatus = {
-  processing: "processing",
-  ready: "ready",
-  failed: "failed",
-} as const;
-
-export interface QuestionSheet {
-  id: number;
-  title: string;
-  sourceType: QuestionSheetSourceType;
-  filename: string;
-  mimeType: string;
-  status: QuestionSheetStatus;
-  /** @nullable */
-  errorMessage: string | null;
-  questionCount: number;
-  createdAt: string;
-}
-
-export interface ExtractedQuestion {
-  id: number;
-  sheetId: number;
-  questionNumber: number;
-  question: string;
-  answer: string;
-  explanation: string;
-}
-
-export type QuestionSheetWithQuestionsSourceType =
-  (typeof QuestionSheetWithQuestionsSourceType)[keyof typeof QuestionSheetWithQuestionsSourceType];
-
-export const QuestionSheetWithQuestionsSourceType = {
-  image: "image",
-  pdf: "pdf",
-} as const;
-
-export type QuestionSheetWithQuestionsStatus =
-  (typeof QuestionSheetWithQuestionsStatus)[keyof typeof QuestionSheetWithQuestionsStatus];
-
-export const QuestionSheetWithQuestionsStatus = {
-  processing: "processing",
-  ready: "ready",
-  failed: "failed",
-} as const;
-
-export interface QuestionSheetWithQuestions {
-  id: number;
-  title: string;
-  sourceType: QuestionSheetWithQuestionsSourceType;
-  filename: string;
-  mimeType: string;
-  status: QuestionSheetWithQuestionsStatus;
-  /** @nullable */
-  errorMessage: string | null;
-  questionCount: number;
-  createdAt: string;
-  questions: ExtractedQuestion[];
-}
+export type AskDocumentFromImageBody = {
+  file: Blob;
+};

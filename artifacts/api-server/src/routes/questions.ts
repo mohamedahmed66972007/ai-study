@@ -1,4 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
+import multer from "multer";
 import { desc, eq } from "drizzle-orm";
 import {
   db,
@@ -7,9 +8,14 @@ import {
   questionsTable,
 } from "@workspace/db";
 import { AskDocumentQuestionBody } from "@workspace/api-zod";
-import { askDocument } from "../lib/ask";
+import { askDocument, extractAndAnswerFromImage } from "../lib/ask";
 
 const router: IRouter = Router();
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25MB
+});
 
 router.get("/documents/:id/questions", async (req: Request, res: Response) => {
   const id = Number(req.params.id);
@@ -102,5 +108,89 @@ router.post("/documents/:id/questions", async (req: Request, res: Response) => {
     res.status(500).json({ error: "حدث خطأ أثناء توليد الإجابة" });
   }
 });
+
+router.post(
+  "/documents/:id/questions/from-image",
+  upload.single("file"),
+  async (req: Request, res: Response) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) {
+      res.status(400).json({ error: "معرف غير صالح" });
+      return;
+    }
+    const file = req.file;
+    if (!file) {
+      res.status(400).json({ error: "صورة مطلوبة" });
+      return;
+    }
+    if (!file.mimetype.startsWith("image/")) {
+      res.status(400).json({ error: "يجب أن يكون الملف صورة" });
+      return;
+    }
+
+    const [doc] = await db
+      .select()
+      .from(documentsTable)
+      .where(eq(documentsTable.id, id));
+    if (!doc) {
+      res.status(404).json({ error: "المستند غير موجود" });
+      return;
+    }
+    if (doc.status !== "ready") {
+      res
+        .status(409)
+        .json({ error: "المستند ليس جاهزًا بعد. يرجى الانتظار." });
+      return;
+    }
+
+    const pages = await db
+      .select()
+      .from(documentPagesTable)
+      .where(eq(documentPagesTable.documentId, id))
+      .orderBy(documentPagesTable.pageNumber);
+
+    try {
+      const extracted = await extractAndAnswerFromImage({
+        documentTitle: doc.title,
+        pages,
+        imageBuffer: file.buffer,
+        imageMimeType: file.mimetype,
+      });
+
+      if (extracted.length === 0) {
+        res.status(422).json({
+          error: "لم يتم العثور على أي سؤال في الصورة. حاول صورة أوضح.",
+        });
+        return;
+      }
+
+      const inserted = await db
+        .insert(questionsTable)
+        .values(
+          extracted.map((q) => ({
+            documentId: id,
+            question: q.question,
+            answer: q.answer,
+            citations: q.citations,
+          })),
+        )
+        .returning();
+
+      res.json(
+        inserted.map((q) => ({
+          id: q.id,
+          documentId: q.documentId,
+          question: q.question,
+          answer: q.answer,
+          citations: q.citations,
+          createdAt: q.createdAt.toISOString(),
+        })),
+      );
+    } catch (err) {
+      req.log.error({ err }, "Failed to extract+answer from image");
+      res.status(500).json({ error: "حدث خطأ أثناء قراءة الصورة" });
+    }
+  },
+);
 
 export default router;

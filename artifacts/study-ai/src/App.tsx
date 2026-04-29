@@ -7,8 +7,6 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { Home } from "@/pages/home";
 import { Upload } from "@/pages/upload";
 import { Document } from "@/pages/document";
-import { Sheets } from "@/pages/sheets";
-import { SheetView } from "@/pages/sheet-view";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -26,8 +24,6 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/upload" component={Upload} />
       <Route path="/documents/:id" component={Document} />
-      <Route path="/sheets" component={Sheets} />
-      <Route path="/sheets/:id" component={SheetView} />
       <Route component={NotFound} />
     </Switch>
   );

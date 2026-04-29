@@ -4,10 +4,7 @@ import {
   useGetStats,
   useListRecentQuestions,
   useDeleteDocument,
-  useListQuestionSheets,
-  useDeleteQuestionSheet,
   getListDocumentsQueryKey,
-  getListQuestionSheetsQueryKey,
   getGetStatsQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -29,10 +26,7 @@ import {
   Library,
   Clock,
   AlertCircle,
-  FileQuestion,
   Sparkles,
-  Image as ImageIcon,
-  ChevronLeft,
   Loader2,
   ArrowLeft,
 } from "lucide-react";
@@ -63,12 +57,6 @@ export function Home() {
   const queryClient = useQueryClient();
   const { data: stats, isLoading: statsLoading } = useGetStats();
   const { data: documents, isLoading: docsLoading } = useListDocuments();
-  const { data: sheets, isLoading: sheetsLoading } = useListQuestionSheets({
-    query: {
-      queryKey: getListQuestionSheetsQueryKey(),
-      refetchInterval: 4000,
-    },
-  });
   const { data: recentQuestions, isLoading: recentLoading } =
     useListRecentQuestions();
 
@@ -78,19 +66,6 @@ export function Home() {
         toast.success("تم حذف المستند بنجاح");
         queryClient.invalidateQueries({
           queryKey: getListDocumentsQueryKey(),
-        });
-        queryClient.invalidateQueries({ queryKey: getGetStatsQueryKey() });
-      },
-      onError: () => toast.error("حدث خطأ أثناء الحذف"),
-    },
-  });
-
-  const deleteSheet = useDeleteQuestionSheet({
-    mutation: {
-      onSuccess: () => {
-        toast.success("تم حذف ورقة الأسئلة");
-        queryClient.invalidateQueries({
-          queryKey: getListQuestionSheetsQueryKey(),
         });
         queryClient.invalidateQueries({ queryKey: getGetStatsQueryKey() });
       },
@@ -116,8 +91,8 @@ export function Home() {
             <span className="block text-primary mt-1">مع مذاكر الذكي</span>
           </h1>
           <p className="text-muted-foreground text-base md:text-lg max-w-2xl text-balance">
-            ارفع كتابك أو مذكرتك واسأل أي سؤال، أو ارفع صورة/PDF لورقة أسئلة
-            وسنستخرج الأسئلة ونجيب عنها مع عرض الدليل لكل إجابة.
+            ارفع كتابك أو مذكرتك واسأل أي سؤال — أو أرفق صورة لورقة أسئلة من
+            داخل المذكرة وسيتم استخراجها والإجابة عنها مع الاقتباسات.
           </p>
           <div className="flex flex-wrap gap-3 mt-6">
             <Button
@@ -126,16 +101,7 @@ export function Home() {
               className="gap-2 shadow-md"
             >
               <UploadCloud className="h-5 w-5" />
-              ابدأ الآن
-            </Button>
-            <Button
-              size="lg"
-              variant="outline"
-              onClick={() => setLocation("/sheets")}
-              className="gap-2"
-            >
-              <FileQuestion className="h-5 w-5" />
-              تصفح أوراق الأسئلة
+              ارفع مستنداً جديداً
             </Button>
           </div>
         </div>
@@ -143,7 +109,7 @@ export function Home() {
 
       {/* Stats */}
       <section>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-3 gap-4">
           <StatCard
             icon={Library}
             label="المستندات"
@@ -157,123 +123,12 @@ export function Home() {
             loading={statsLoading}
           />
           <StatCard
-            icon={FileQuestion}
-            label="أوراق الأسئلة"
-            value={stats?.questionSheetCount}
-            loading={statsLoading}
-          />
-          <StatCard
             icon={BookOpen}
             label="الأسئلة المُجَابة"
-            value={
-              (stats?.totalQuestions ?? 0) +
-              (stats?.extractedQuestionCount ?? 0)
-            }
+            value={stats?.totalQuestions}
             loading={statsLoading}
           />
         </div>
-      </section>
-
-      {/* Question sheets */}
-      <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="bg-primary/10 p-2 rounded-lg">
-              <FileQuestion className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <h2 className="text-xl md:text-2xl font-bold">
-                أوراق الأسئلة المستخرجة
-              </h2>
-              <p className="text-xs text-muted-foreground">
-                ارفع صورة/PDF واحصل على الأسئلة مع إجاباتها ودليلها
-              </p>
-            </div>
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setLocation("/sheets")}
-            className="gap-1"
-          >
-            عرض الكل
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-        </div>
-
-        {sheetsLoading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-36 rounded-xl" />
-            ))}
-          </div>
-        ) : !sheets || sheets.length === 0 ? (
-          <Card className="border-dashed border-2 bg-muted/20">
-            <CardContent className="flex flex-col sm:flex-row items-center sm:justify-between gap-4 p-8">
-              <div className="text-center sm:text-right space-y-1">
-                <h3 className="font-semibold">لم ترفع أي ورقة أسئلة بعد</h3>
-                <p className="text-sm text-muted-foreground">
-                  جرّب رفع صورة لورقة امتحان أو واجب وسنتولى الباقي.
-                </p>
-              </div>
-              <Button onClick={() => setLocation("/upload?mode=sheet")} className="gap-2 shrink-0">
-                <ImageIcon className="h-4 w-4" />
-                رفع ورقة أسئلة
-              </Button>
-            </CardContent>
-          </Card>
-        ) : (
-          <motion.div
-            variants={container}
-            initial="hidden"
-            animate="show"
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
-          >
-            {sheets.slice(0, 6).map((sheet) => (
-              <motion.div key={sheet.id} variants={item}>
-                <Card className="h-full flex flex-col group hover:border-primary/40 hover:shadow-lg transition-all">
-                  <CardHeader className="pb-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <div className="bg-primary/10 p-1.5 rounded-md">
-                          {sheet.sourceType === "image" ? (
-                            <ImageIcon className="h-4 w-4 text-primary" />
-                          ) : (
-                            <FileText className="h-4 w-4 text-primary" />
-                          )}
-                        </div>
-                        <Badge variant="outline" className="text-[10px]">
-                          {sheet.sourceType === "image" ? "صورة" : "PDF"}
-                        </Badge>
-                      </div>
-                      <DeleteButton
-                        title="هل تريد حذف ورقة الأسئلة؟"
-                        description={`سيتم حذف "${sheet.title}" وجميع الأسئلة المستخرجة منها.`}
-                        onConfirm={() => deleteSheet.mutate({ id: sheet.id })}
-                      />
-                    </div>
-                    <CardTitle className="text-base line-clamp-2 leading-tight mt-2">
-                      <Link
-                        href={`/sheets/${sheet.id}`}
-                        className="hover:text-primary transition-colors"
-                      >
-                        {sheet.title}
-                      </Link>
-                    </CardTitle>
-                    <CardDescription className="text-[11px]">
-                      {format(new Date(sheet.createdAt), "dd MMM yyyy", {
-                        locale: ar,
-                      })}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="pt-0 mt-auto">
-                    <SheetStatusButton sheet={sheet} />
-                  </CardContent>
-                </Card>
-              </motion.div>
-            ))}
-          </motion.div>
-        )}
       </section>
 
       {/* Documents + recent questions */}
@@ -489,39 +344,6 @@ function StatCard({
         </div>
       </CardContent>
     </Card>
-  );
-}
-
-function SheetStatusButton({
-  sheet,
-}: {
-  sheet: { id: number; status: string; questionCount: number };
-}) {
-  if (sheet.status === "failed") {
-    return (
-      <div className="flex items-center gap-2 text-xs text-destructive bg-destructive/10 p-2 rounded-md">
-        <AlertCircle className="h-3.5 w-3.5" />
-        <span>فشل الاستخراج</span>
-      </div>
-    );
-  }
-  if (sheet.status === "processing") {
-    return (
-      <Button variant="secondary" className="w-full gap-2" asChild>
-        <Link href={`/sheets/${sheet.id}`}>
-          <Loader2 className="h-4 w-4 animate-spin" />
-          جاري الاستخراج…
-        </Link>
-      </Button>
-    );
-  }
-  return (
-    <Button className="w-full gap-2" asChild>
-      <Link href={`/sheets/${sheet.id}`}>
-        عرض ({sheet.questionCount} سؤال)
-        <ArrowLeft className="h-4 w-4" />
-      </Link>
-    </Button>
   );
 }
 

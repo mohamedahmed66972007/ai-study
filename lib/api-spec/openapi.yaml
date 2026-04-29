@@ -14,8 +14,6 @@ tags:
     description: Document upload, listing, and management
   - name: questions
     description: Asking questions about uploaded documents
-  - name: question-sheets
-    description: Upload images / PDFs of question sheets and get extracted Q&A
 paths:
   /healthz:
     get:
@@ -177,6 +175,50 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /documents/{id}/questions/from-image:
+    post:
+      operationId: askDocumentFromImage
+      tags: [questions]
+      summary: Upload an image of one or more questions and answer all of them based on the document
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+              required:
+                - file
+      responses:
+        "200":
+          description: One or more answered questions extracted from the image
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/QuestionRecord"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: No questions were detected in the image
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /documents/recent-questions:
     get:
       operationId: listRecentQuestions
@@ -191,63 +233,6 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/RecentQuestion"
-  /question-sheets:
-    get:
-      operationId: listQuestionSheets
-      tags: [question-sheets]
-      summary: List all uploaded question sheets
-      responses:
-        "200":
-          description: List of question sheets
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/QuestionSheet"
-  /question-sheets/{id}:
-    get:
-      operationId: getQuestionSheet
-      tags: [question-sheets]
-      summary: Get a single question sheet with its extracted questions
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-      responses:
-        "200":
-          description: Question sheet with extracted questions
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/QuestionSheetWithQuestions"
-        "404":
-          description: Not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiError"
-    delete:
-      operationId: deleteQuestionSheet
-      tags: [question-sheets]
-      summary: Delete a question sheet
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-      responses:
-        "204":
-          description: Deleted
-        "404":
-          description: Not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiError"
 components:
   schemas:
     HealthStatus:
@@ -383,110 +368,9 @@ components:
           type: integer
         totalQuestions:
           type: integer
-        questionSheetCount:
-          type: integer
-        extractedQuestionCount:
-          type: integer
       required:
         - documentCount
         - readyDocumentCount
         - processingDocumentCount
         - totalPages
         - totalQuestions
-        - questionSheetCount
-        - extractedQuestionCount
-    QuestionSheet:
-      type: object
-      properties:
-        id:
-          type: integer
-        title:
-          type: string
-        sourceType:
-          type: string
-          enum: [image, pdf]
-        filename:
-          type: string
-        mimeType:
-          type: string
-        status:
-          type: string
-          enum: [processing, ready, failed]
-        errorMessage:
-          type: ["string", "null"]
-        questionCount:
-          type: integer
-        createdAt:
-          type: string
-          format: date-time
-      required:
-        - id
-        - title
-        - sourceType
-        - filename
-        - mimeType
-        - status
-        - errorMessage
-        - questionCount
-        - createdAt
-    ExtractedQuestion:
-      type: object
-      properties:
-        id:
-          type: integer
-        sheetId:
-          type: integer
-        questionNumber:
-          type: integer
-        question:
-          type: string
-        answer:
-          type: string
-        explanation:
-          type: string
-      required:
-        - id
-        - sheetId
-        - questionNumber
-        - question
-        - answer
-        - explanation
-    QuestionSheetWithQuestions:
-      type: object
-      properties:
-        id:
-          type: integer
-        title:
-          type: string
-        sourceType:
-          type: string
-          enum: [image, pdf]
-        filename:
-          type: string
-        mimeType:
-          type: string
-        status:
-          type: string
-          enum: [processing, ready, failed]
-        errorMessage:
-          type: ["string", "null"]
-        questionCount:
-          type: integer
-        createdAt:
-          type: string
-          format: date-time
-        questions:
-          type: array
-          items:
-            $ref: "#/components/schemas/ExtractedQuestion"
-      required:
-        - id
-        - title
-        - sourceType
-        - filename
-        - mimeType
-        - status
-        - errorMessage
-        - questionCount
-        - createdAt
-        - questions

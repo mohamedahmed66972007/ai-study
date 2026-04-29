@@ -1,4 +1,12 @@
 import { useState, useEffect, useRef } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useParams } from "wouter";
 import { Document as PdfDocument, Page as PdfPage, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
@@ -30,7 +38,9 @@ import {
   FileText, 
   AlertCircle,
   ChevronRight,
-  Maximize2
+  Maximize2,
+  ImagePlus,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,6 +60,11 @@ export function Document() {
   const [question, setQuestion] = useState("");
   const [activePage, setActivePage] = useState<number | null>(null);
   const [isMobileSourceOpen, setIsMobileSourceOpen] = useState(false);
+  const [imageDialogOpen, setImageDialogOpen] = useState(false);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [isExtractingImage, setIsExtractingImage] = useState(false);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const { data: document, isLoading: docLoading } = useGetDocument(id, {
@@ -91,6 +106,61 @@ export function Document() {
   const handleCitationClick = (pageNumber: number) => {
     setActivePage(pageNumber);
     setIsMobileSourceOpen(true);
+  };
+
+  const handlePickImage = (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      toast.error("يجب أن يكون الملف صورة");
+      return;
+    }
+    if (file.size > 25 * 1024 * 1024) {
+      toast.error("حجم الصورة يجب أن لا يتجاوز 25 ميجابايت");
+      return;
+    }
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+    setImageDialogOpen(true);
+  };
+
+  const closeImageDialog = () => {
+    setImageDialogOpen(false);
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+    setImagePreview(null);
+    setImageFile(null);
+    if (imageInputRef.current) imageInputRef.current.value = "";
+  };
+
+  const handleSubmitImage = async () => {
+    if (!imageFile) return;
+    setIsExtractingImage(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", imageFile);
+      const res = await fetch(
+        `${import.meta.env.BASE_URL}api/documents/${id}/questions/from-image`,
+        { method: "POST", body: fd },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error || "فشل تحليل الصورة");
+      }
+      const created = (await res.json()) as Array<{ id: number }>;
+      toast.success(`تم استخراج وحلّ ${created.length} سؤال من الصورة`);
+      queryClient.invalidateQueries({
+        queryKey: getListDocumentQuestionsQueryKey(id),
+      });
+      queryClient.invalidateQueries({ queryKey: getGetStatsQueryKey() });
+      queryClient.invalidateQueries({
+        queryKey: getListRecentQuestionsQueryKey(),
+      });
+      queryClient.invalidateQueries({ queryKey: getGetDocumentQueryKey(id) });
+      closeImageDialog();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "حدث خطأ";
+      toast.error(msg);
+    } finally {
+      setIsExtractingImage(false);
+    }
   };
 
   // Auto-scroll to bottom of questions when new one arrives
@@ -295,17 +365,38 @@ export function Document() {
         {/* Input Area */}
         <div className="p-4 bg-background border-t shrink-0">
           <form onSubmit={handleAsk} className="max-w-3xl mx-auto relative">
+            <input
+              type="file"
+              accept="image/*"
+              ref={imageInputRef}
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) handlePickImage(f);
+              }}
+            />
             <Input
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
               placeholder="اسأل عن أي شيء في المستند..."
-              className="pr-4 pl-12 py-6 text-base rounded-xl shadow-sm bg-background"
-              disabled={askQuestion.isPending}
+              className="pr-12 pl-12 py-6 text-base rounded-xl shadow-sm bg-background"
+              disabled={askQuestion.isPending || isExtractingImage}
             />
-            <Button 
-              type="submit" 
-              size="icon" 
-              disabled={!question.trim() || askQuestion.isPending}
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              onClick={() => imageInputRef.current?.click()}
+              disabled={askQuestion.isPending || isExtractingImage}
+              title="رفع صورة فيها أسئلة"
+              className="absolute right-2 top-2 h-9 w-9 rounded-lg text-muted-foreground hover:text-primary"
+            >
+              <ImagePlus className="h-4 w-4" />
+            </Button>
+            <Button
+              type="submit"
+              size="icon"
+              disabled={!question.trim() || askQuestion.isPending || isExtractingImage}
               className="absolute left-2 top-2 h-9 w-9 rounded-lg"
             >
               {askQuestion.isPending ? (
@@ -315,8 +406,72 @@ export function Document() {
               )}
             </Button>
           </form>
+          <p className="text-[11px] text-muted-foreground text-center mt-2">
+            اكتب سؤالك، أو اضغط أيقونة الصورة لرفع ورقة أسئلة وسنستخرجها ونجيب
+            عنها من المذكرة.
+          </p>
         </div>
       </div>
+
+      {/* Image upload dialog */}
+      <Dialog
+        open={imageDialogOpen}
+        onOpenChange={(open) => {
+          if (!open && !isExtractingImage) closeImageDialog();
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>استخراج أسئلة من صورة</DialogTitle>
+            <DialogDescription>
+              سيتم قراءة الأسئلة من الصورة والإجابة عنها بناءً على محتوى
+              "{document.title}" مع الاقتباسات.
+            </DialogDescription>
+          </DialogHeader>
+          {imagePreview && (
+            <div className="relative rounded-lg overflow-hidden border bg-muted/30">
+              <img
+                src={imagePreview}
+                alt="معاينة"
+                className="w-full max-h-72 object-contain bg-background"
+              />
+              {!isExtractingImage && (
+                <button
+                  type="button"
+                  onClick={closeImageDialog}
+                  className="absolute top-2 left-2 bg-background/80 backdrop-blur p-1 rounded-full hover:bg-background"
+                  aria-label="إلغاء"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+          )}
+          <DialogFooter className="flex-row-reverse sm:justify-start gap-2">
+            <Button
+              variant="outline"
+              onClick={closeImageDialog}
+              disabled={isExtractingImage}
+            >
+              إلغاء
+            </Button>
+            <Button
+              onClick={handleSubmitImage}
+              disabled={isExtractingImage || !imageFile}
+              className="gap-2"
+            >
+              {isExtractingImage ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  جاري الاستخراج…
+                </>
+              ) : (
+                <>استخراج وحلّ الأسئلة</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Right Pane - Source Viewer (Desktop) */}
       <div className="hidden md:flex w-[400px] lg:w-[500px] flex-col bg-muted/10 shrink-0">

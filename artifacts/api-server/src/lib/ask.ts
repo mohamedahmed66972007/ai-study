@@ -7,6 +7,12 @@ export interface AskResult {
   citations: StoredCitation[];
 }
 
+export interface ExtractedAnsweredQuestion {
+  question: string;
+  answer: string;
+  citations: StoredCitation[];
+}
+
 const MAX_CONTEXT_CHARS = 600_000;
 
 function buildContext(pages: DocumentPageRow[]): string {
@@ -23,6 +29,21 @@ function buildContext(pages: DocumentPageRow[]): string {
     total += block.length;
   }
   return chunks.join("");
+}
+
+function filterValidCitations(
+  raw: unknown,
+  validPageNumbers: Set<number>,
+): StoredCitation[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (c): c is StoredCitation =>
+      !!c &&
+      typeof (c as StoredCitation).pageNumber === "number" &&
+      validPageNumbers.has((c as StoredCitation).pageNumber) &&
+      typeof (c as StoredCitation).quote === "string" &&
+      (c as StoredCitation).quote.trim().length > 0,
+  );
 }
 
 export async function askDocument(args: {
@@ -73,25 +94,131 @@ export async function askDocument(args: {
   });
 
   const text = response.text ?? "";
-  let parsed: AskResult;
+  let parsed: { answer?: string; citations?: unknown };
   try {
-    parsed = JSON.parse(text) as AskResult;
+    parsed = JSON.parse(text);
   } catch (err) {
     logger.error({ err, text }, "Failed to parse Gemini JSON response");
     throw new Error("AI response was not valid JSON");
   }
 
   const validPageNumbers = new Set(pages.map((p) => p.pageNumber));
-  const citations = (parsed.citations ?? []).filter(
-    (c) =>
-      typeof c?.pageNumber === "number" &&
-      validPageNumbers.has(c.pageNumber) &&
-      typeof c?.quote === "string" &&
-      c.quote.trim().length > 0,
-  );
-
   return {
     answer: typeof parsed.answer === "string" ? parsed.answer : "",
-    citations,
+    citations: filterValidCitations(parsed.citations, validPageNumbers),
   };
+}
+
+export async function extractAndAnswerFromImage(args: {
+  documentTitle: string;
+  pages: DocumentPageRow[];
+  imageBuffer: Buffer;
+  imageMimeType: string;
+}): Promise<ExtractedAnsweredQuestion[]> {
+  const { documentTitle, pages, imageBuffer, imageMimeType } = args;
+  const context = buildContext(pages);
+
+  const systemInstruction = `أنت "مذاكر"، مساعد مذاكرة عربي ذكي وموثوق. مرفق معك:
+1) محتوى مستند مرجعي ("${documentTitle}") مقسم إلى صفحات مرقّمة.
+2) صورة تحتوي على سؤال أو عدة أسئلة دراسية.
+
+مهمتك:
+- استخراج كل سؤال موجود في الصورة (ولا شيء غير الأسئلة).
+- الإجابة عن كل سؤال اعتمادًا حصريًا على نص المستند المرجعي المرفق.
+- إذا لم تكن الإجابة موجودة في المستند فاكتب صراحةً أن المعلومة غير متوفرة في هذا المصدر.
+- لكل إجابة، أرفق اقتباسات قصيرة من المستند مع رقم الصفحة الصحيح كأدلة.
+
+قواعد صارمة:
+- أجب بنفس لغة السؤال (إذا كان بالعربية أجب بالعربية).
+- لا تستخدم أي معلومة من خارج المستند المرجعي.
+- لا تخترع أرقام صفحات. لا تستشهد إلا بنص موجود فعلاً في الصفحة المذكورة.
+- لا تُكرّر السؤال داخل الإجابة.
+- ردك يجب أن يكون JSON صالحًا فقط بالحقل: questions (قائمة عناصر بحقول question (نص السؤال كما استخرج من الصورة)، answer (الإجابة الكاملة)، citations (قائمة عناصر بحقول pageNumber و quote)).`;
+
+  const userPrompt = `محتوى المستند المرجعي:\n${context}\n\nالصورة المرفقة تحتوي على أسئلة. استخرجها وأجب عنها بناءً على المستند فقط.`;
+
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash",
+    contents: [
+      {
+        role: "user",
+        parts: [
+          {
+            inlineData: {
+              mimeType: imageMimeType,
+              data: imageBuffer.toString("base64"),
+            },
+          },
+          { text: userPrompt },
+        ],
+      },
+    ],
+    config: {
+      systemInstruction,
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          questions: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                question: { type: Type.STRING },
+                answer: { type: Type.STRING },
+                citations: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      pageNumber: { type: Type.INTEGER },
+                      quote: { type: Type.STRING },
+                    },
+                    required: ["pageNumber", "quote"],
+                  },
+                },
+              },
+              required: ["question", "answer", "citations"],
+            },
+          },
+        },
+        required: ["questions"],
+      },
+    },
+  });
+
+  const text = response.text ?? "";
+  let parsed: { questions?: unknown };
+  try {
+    parsed = JSON.parse(text);
+  } catch (err) {
+    logger.error({ err, text }, "Failed to parse Gemini extraction JSON");
+    throw new Error("AI response was not valid JSON");
+  }
+
+  if (!Array.isArray(parsed.questions)) return [];
+
+  const validPageNumbers = new Set(pages.map((p) => p.pageNumber));
+  const out: ExtractedAnsweredQuestion[] = [];
+  for (const item of parsed.questions) {
+    if (
+      !item ||
+      typeof (item as ExtractedAnsweredQuestion).question !== "string" ||
+      typeof (item as ExtractedAnsweredQuestion).answer !== "string"
+    ) {
+      continue;
+    }
+    const q = (item as ExtractedAnsweredQuestion).question.trim();
+    const a = (item as ExtractedAnsweredQuestion).answer.trim();
+    if (q.length === 0) continue;
+    out.push({
+      question: q,
+      answer: a,
+      citations: filterValidCitations(
+        (item as ExtractedAnsweredQuestion).citations,
+        validPageNumbers,
+      ),
+    });
+  }
+  return out;
 }

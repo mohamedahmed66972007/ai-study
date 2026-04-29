@@ -12,6 +12,4 @@ export interface LibraryStats {
   processingDocumentCount: number;
   totalPages: number;
   totalQuestions: number;
-  questionSheetCount: number;
-  extractedQuestionCount: number;
 }

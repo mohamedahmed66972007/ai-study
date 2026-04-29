@@ -51,6 +51,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
+import { RichAnswer } from "@/components/rich-answer";
 
 export function Document() {
   const params = useParams();
@@ -368,8 +369,8 @@ export function Document() {
                             <BookOpen className="h-4 w-4 text-primary" />
                           </div>
                           <div className="space-y-4 flex-1">
-                            <div className="bg-background border shadow-sm rounded-2xl rounded-tl-sm px-5 py-4 text-sm leading-relaxed whitespace-pre-wrap">
-                              {q.answer}
+                            <div className="bg-background border shadow-sm rounded-2xl rounded-tl-sm px-5 py-4">
+                              <RichAnswer text={q.answer} />
                             </div>
 
                             {/* Citations */}

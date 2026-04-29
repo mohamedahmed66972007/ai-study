@@ -24,6 +24,8 @@ import type {
   HealthStatus,
   LibraryStats,
   QuestionRecord,
+  QuestionSheet,
+  QuestionSheetWithQuestions,
   RecentQuestion,
 } from "./api.schemas";
 
@@ -765,3 +767,249 @@ export function useListRecentQuestions<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary List all uploaded question sheets
+ */
+export const getListQuestionSheetsUrl = () => {
+  return `/api/question-sheets`;
+};
+
+export const listQuestionSheets = async (
+  options?: RequestInit,
+): Promise<QuestionSheet[]> => {
+  return customFetch<QuestionSheet[]>(getListQuestionSheetsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListQuestionSheetsQueryKey = () => {
+  return [`/api/question-sheets`] as const;
+};
+
+export const getListQuestionSheetsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listQuestionSheets>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listQuestionSheets>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListQuestionSheetsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listQuestionSheets>>
+  > = ({ signal }) => listQuestionSheets({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listQuestionSheets>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListQuestionSheetsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listQuestionSheets>>
+>;
+export type ListQuestionSheetsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List all uploaded question sheets
+ */
+
+export function useListQuestionSheets<
+  TData = Awaited<ReturnType<typeof listQuestionSheets>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listQuestionSheets>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListQuestionSheetsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get a single question sheet with its extracted questions
+ */
+export const getGetQuestionSheetUrl = (id: number) => {
+  return `/api/question-sheets/${id}`;
+};
+
+export const getQuestionSheet = async (
+  id: number,
+  options?: RequestInit,
+): Promise<QuestionSheetWithQuestions> => {
+  return customFetch<QuestionSheetWithQuestions>(getGetQuestionSheetUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetQuestionSheetQueryKey = (id: number) => {
+  return [`/api/question-sheets/${id}`] as const;
+};
+
+export const getGetQuestionSheetQueryOptions = <
+  TData = Awaited<ReturnType<typeof getQuestionSheet>>,
+  TError = ErrorType<ApiError>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getQuestionSheet>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetQuestionSheetQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getQuestionSheet>>
+  > = ({ signal }) => getQuestionSheet(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getQuestionSheet>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetQuestionSheetQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getQuestionSheet>>
+>;
+export type GetQuestionSheetQueryError = ErrorType<ApiError>;
+
+/**
+ * @summary Get a single question sheet with its extracted questions
+ */
+
+export function useGetQuestionSheet<
+  TData = Awaited<ReturnType<typeof getQuestionSheet>>,
+  TError = ErrorType<ApiError>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getQuestionSheet>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetQuestionSheetQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Delete a question sheet
+ */
+export const getDeleteQuestionSheetUrl = (id: number) => {
+  return `/api/question-sheets/${id}`;
+};
+
+export const deleteQuestionSheet = async (
+  id: number,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteQuestionSheetUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteQuestionSheetMutationOptions = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteQuestionSheet>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteQuestionSheet>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["deleteQuestionSheet"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteQuestionSheet>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteQuestionSheet(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteQuestionSheetMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteQuestionSheet>>
+>;
+
+export type DeleteQuestionSheetMutationError = ErrorType<ApiError>;
+
+/**
+ * @summary Delete a question sheet
+ */
+export const useDeleteQuestionSheet = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteQuestionSheet>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteQuestionSheet>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getDeleteQuestionSheetMutationOptions(options));
+};

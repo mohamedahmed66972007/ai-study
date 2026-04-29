@@ -6,6 +6,8 @@ import {
   documentsTable,
   documentPagesTable,
   questionsTable,
+  questionSheetsTable,
+  extractedQuestionsTable,
 } from "@workspace/db";
 import { extractPdfPages } from "../lib/pdf";
 import { logger } from "../lib/logger";
@@ -47,12 +49,22 @@ router.get("/stats", async (_req: Request, res: Response) => {
     .select({ total: sql<number>`count(*)::int` })
     .from(questionsTable);
 
+  const [sheetCounts] = await db
+    .select({ total: sql<number>`count(*)::int` })
+    .from(questionSheetsTable);
+
+  const [extractedCounts] = await db
+    .select({ total: sql<number>`count(*)::int` })
+    .from(extractedQuestionsTable);
+
   res.json({
     documentCount: docCounts?.total ?? 0,
     readyDocumentCount: docCounts?.ready ?? 0,
     processingDocumentCount: docCounts?.processing ?? 0,
     totalPages: docCounts?.pages ?? 0,
     totalQuestions: questionCounts?.total ?? 0,
+    questionSheetCount: sheetCounts?.total ?? 0,
+    extractedQuestionCount: extractedCounts?.total ?? 0,
   });
 });
 

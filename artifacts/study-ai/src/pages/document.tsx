@@ -275,9 +275,14 @@ export function Document() {
   }
 
   return (
-    <div className="flex-1 flex flex-col md:flex-row h-[calc(100dvh-4rem)] overflow-hidden">
+    // We pin the document page to the viewport (below the 4rem-tall sticky
+    // header) using fixed positioning. This guarantees the chat composer
+    // input stays visible at the bottom of the screen — without it, when the
+    // chat content grows past the viewport the parent flex chain lets the
+    // whole page scroll, pushing the input off-screen.
+    <div className="fixed inset-x-0 top-16 bottom-0 flex flex-col md:flex-row overflow-hidden bg-background">
       {/* Left Pane - Chat Area */}
-      <div className="flex-1 flex flex-col relative border-l">
+      <div className="flex-1 flex flex-col relative border-l min-h-0 min-w-0">
         {/* Document Header */}
         <div className="border-b bg-background/95 backdrop-blur px-6 py-4 flex items-center justify-between z-10 shrink-0">
           <div>

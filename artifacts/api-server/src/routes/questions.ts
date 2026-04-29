@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import multer from "multer";
-import { desc, eq } from "drizzle-orm";
+import { asc, desc, eq } from "drizzle-orm";
 import {
   db,
   documentsTable,
@@ -23,11 +23,16 @@ router.get("/documents/:id/questions", async (req: Request, res: Response) => {
     res.status(400).json({ error: "معرف غير صالح" });
     return;
   }
+  // Order by createdAt DESC, then by id DESC as tiebreaker. When a batch of
+  // questions is inserted from the same image at nearly the same instant
+  // (rounded to the same millisecond), the higher id is the later insert,
+  // so newest stays at the top consistently. The client reverses this to
+  // render oldest-first / newest-at-the-bottom in chat-style.
   const rows = await db
     .select()
     .from(questionsTable)
     .where(eq(questionsTable.documentId, id))
-    .orderBy(desc(questionsTable.createdAt));
+    .orderBy(desc(questionsTable.createdAt), desc(questionsTable.id));
   res.json(
     rows.map((q) => ({
       id: q.id,

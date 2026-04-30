@@ -3,10 +3,9 @@ import { Fragment, type ReactNode } from "react";
 type Token =
   | { kind: "text"; value: string }
   | { kind: "bold"; value: string }
-  | { kind: "highlight"; value: string }
   | { kind: "key"; value: string };
 
-const PATTERN = /\[\[([^\[\]]+?)\]\]|\*\*([^*]+?)\*\*|==([^=]+?)==/g;
+const PATTERN = /\[\[([^\[\]]+?)\]\]|\*\*([^*]+?)\*\*/g;
 
 function tokenize(line: string): Token[] {
   const tokens: Token[] = [];
@@ -21,8 +20,6 @@ function tokenize(line: string): Token[] {
       tokens.push({ kind: "key", value: m[1] });
     } else if (m[2] !== undefined) {
       tokens.push({ kind: "bold", value: m[2] });
-    } else if (m[3] !== undefined) {
-      tokens.push({ kind: "highlight", value: m[3] });
     }
     lastIndex = m.index + m[0].length;
   }
@@ -43,20 +40,11 @@ function renderTokens(tokens: Token[]): ReactNode {
             {t.value}
           </strong>
         );
-      case "highlight":
-        return (
-          <mark
-            key={i}
-            className="bg-yellow-200/80 dark:bg-yellow-400/30 text-foreground rounded-sm px-0.5"
-          >
-            {t.value}
-          </mark>
-        );
       case "key":
         return (
           <strong
             key={i}
-            className="text-red-600 dark:text-red-400 font-bold"
+            className="text-blue-600 dark:text-blue-400 font-bold text-base"
           >
             {t.value}
           </strong>

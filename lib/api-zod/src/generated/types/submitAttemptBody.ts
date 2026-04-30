@@ -9,4 +9,9 @@ import type { SubmitAttemptAnswer } from "./submitAttemptAnswer";
 
 export interface SubmitAttemptBody {
   answers: SubmitAttemptAnswer[];
+  /** When set, only these question ids are graded and counted toward
+the attempt's max score. Used by the "retake wrong questions
+only" flow.
+ */
+  questionIds?: string[];
 }

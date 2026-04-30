@@ -5,6 +5,8 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { ComparisonTable } from "./comparisonTable";
+import type { OddOneOut } from "./oddOneOut";
 import type { QuizQuestionType } from "./quizQuestionType";
 
 export interface QuizQuestion {
@@ -12,10 +14,21 @@ export interface QuizQuestion {
   type: QuizQuestionType;
   prompt: string;
   choices?: string[];
+  /** For mcq/true_false: the literal correct option text.
+For fill_blank/short_answer: the reference answer.
+For comparison_table / list_factors / odd_one_out: a JSON-encoded
+string of the same shape as `comparison`, `factors`, or
+`oddOneOut` respectively (kept here for backward compatibility
+with grading).
+ */
   correctAnswer: string;
   explanation?: string;
   pageNumber?: number;
   /** @nullable */
   pageLabel?: string | null;
   points: number;
+  comparison?: ComparisonTable;
+  /** Reference list of factors for a list_factors question. */
+  factors?: string[];
+  oddOneOut?: OddOneOut;
 }

@@ -107,7 +107,36 @@ export const QuizQuestionType = {
   true_false: "true_false",
   fill_blank: "fill_blank",
   short_answer: "short_answer",
+  comparison_table: "comparison_table",
+  list_factors: "list_factors",
+  odd_one_out: "odd_one_out",
 } as const;
+
+export type ComparisonTableRowsItem = {
+  /** Row label (the property/aspect being compared). */
+  label: string;
+  /** Reference cell values, one per header. */
+  cells: string[];
+};
+
+/**
+ * Reference data for a comparison_table question.
+ */
+export interface ComparisonTable {
+  /** Column headers — usually the concepts being compared. */
+  headers: string[];
+  rows: ComparisonTableRowsItem[];
+}
+
+/**
+ * Reference data for an odd_one_out question.
+ */
+export interface OddOneOut {
+  /** The literal odd word among `choices`. */
+  different: string;
+  /** Reference reasoning explaining why it is the odd one. */
+  reason: string;
+}
 
 export type QuizDifficulty =
   (typeof QuizDifficulty)[keyof typeof QuizDifficulty];
@@ -133,12 +162,23 @@ export interface QuizQuestion {
   type: QuizQuestionType;
   prompt: string;
   choices?: string[];
+  /** For mcq/true_false: the literal correct option text.
+For fill_blank/short_answer: the reference answer.
+For comparison_table / list_factors / odd_one_out: a JSON-encoded
+string of the same shape as `comparison`, `factors`, or
+`oddOneOut` respectively (kept here for backward compatibility
+with grading).
+ */
   correctAnswer: string;
   explanation?: string;
   pageNumber?: number;
   /** @nullable */
   pageLabel?: string | null;
   points: number;
+  comparison?: ComparisonTable;
+  /** Reference list of factors for a list_factors question. */
+  factors?: string[];
+  oddOneOut?: OddOneOut;
 }
 
 export interface Quiz {
@@ -200,6 +240,11 @@ export interface SubmitAttemptAnswer {
 
 export interface SubmitAttemptBody {
   answers: SubmitAttemptAnswer[];
+  /** When set, only these question ids are graded and counted toward
+the attempt's max score. Used by the "retake wrong questions
+only" flow.
+ */
+  questionIds?: string[];
 }
 
 export type UpdateDocumentPayloadKind =

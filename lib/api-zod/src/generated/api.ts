@@ -234,20 +234,73 @@ export const ListDocumentQuizzesResponseItem = zod.object({
     timeLimitMinutes: zod.number().nullish(),
     difficulty: zod.enum(["easy", "medium", "hard", "mixed"]),
     allowedTypes: zod.array(
-      zod.enum(["mcq", "true_false", "fill_blank", "short_answer"]),
+      zod.enum([
+        "mcq",
+        "true_false",
+        "fill_blank",
+        "short_answer",
+        "comparison_table",
+        "list_factors",
+        "odd_one_out",
+      ]),
     ),
   }),
   questions: zod.array(
     zod.object({
       id: zod.string(),
-      type: zod.enum(["mcq", "true_false", "fill_blank", "short_answer"]),
+      type: zod.enum([
+        "mcq",
+        "true_false",
+        "fill_blank",
+        "short_answer",
+        "comparison_table",
+        "list_factors",
+        "odd_one_out",
+      ]),
       prompt: zod.string(),
       choices: zod.array(zod.string()).optional(),
-      correctAnswer: zod.string(),
+      correctAnswer: zod
+        .string()
+        .describe(
+          "For mcq\/true_false: the literal correct option text.\nFor fill_blank\/short_answer: the reference answer.\nFor comparison_table \/ list_factors \/ odd_one_out: a JSON-encoded\nstring of the same shape as `comparison`, `factors`, or\n`oddOneOut` respectively (kept here for backward compatibility\nwith grading).\n",
+        ),
       explanation: zod.string().optional(),
       pageNumber: zod.number().optional(),
       pageLabel: zod.string().nullish(),
       points: zod.number(),
+      comparison: zod
+        .object({
+          headers: zod
+            .array(zod.string())
+            .describe("Column headers — usually the concepts being compared."),
+          rows: zod.array(
+            zod.object({
+              label: zod
+                .string()
+                .describe("Row label (the property\/aspect being compared)."),
+              cells: zod
+                .array(zod.string())
+                .describe("Reference cell values, one per header."),
+            }),
+          ),
+        })
+        .optional()
+        .describe("Reference data for a comparison_table question."),
+      factors: zod
+        .array(zod.string())
+        .optional()
+        .describe("Reference list of factors for a list_factors question."),
+      oddOneOut: zod
+        .object({
+          different: zod
+            .string()
+            .describe("The literal odd word among `choices`."),
+          reason: zod
+            .string()
+            .describe("Reference reasoning explaining why it is the odd one."),
+        })
+        .optional()
+        .describe("Reference data for an odd_one_out question."),
     }),
   ),
   createdAt: zod.coerce.date(),
@@ -278,7 +331,15 @@ export const CreateDocumentQuizBody = zod.object({
     timeLimitMinutes: zod.number().nullish(),
     difficulty: zod.enum(["easy", "medium", "hard", "mixed"]),
     allowedTypes: zod.array(
-      zod.enum(["mcq", "true_false", "fill_blank", "short_answer"]),
+      zod.enum([
+        "mcq",
+        "true_false",
+        "fill_blank",
+        "short_answer",
+        "comparison_table",
+        "list_factors",
+        "odd_one_out",
+      ]),
     ),
   }),
 });
@@ -301,20 +362,73 @@ export const GetQuizResponse = zod.object({
     timeLimitMinutes: zod.number().nullish(),
     difficulty: zod.enum(["easy", "medium", "hard", "mixed"]),
     allowedTypes: zod.array(
-      zod.enum(["mcq", "true_false", "fill_blank", "short_answer"]),
+      zod.enum([
+        "mcq",
+        "true_false",
+        "fill_blank",
+        "short_answer",
+        "comparison_table",
+        "list_factors",
+        "odd_one_out",
+      ]),
     ),
   }),
   questions: zod.array(
     zod.object({
       id: zod.string(),
-      type: zod.enum(["mcq", "true_false", "fill_blank", "short_answer"]),
+      type: zod.enum([
+        "mcq",
+        "true_false",
+        "fill_blank",
+        "short_answer",
+        "comparison_table",
+        "list_factors",
+        "odd_one_out",
+      ]),
       prompt: zod.string(),
       choices: zod.array(zod.string()).optional(),
-      correctAnswer: zod.string(),
+      correctAnswer: zod
+        .string()
+        .describe(
+          "For mcq\/true_false: the literal correct option text.\nFor fill_blank\/short_answer: the reference answer.\nFor comparison_table \/ list_factors \/ odd_one_out: a JSON-encoded\nstring of the same shape as `comparison`, `factors`, or\n`oddOneOut` respectively (kept here for backward compatibility\nwith grading).\n",
+        ),
       explanation: zod.string().optional(),
       pageNumber: zod.number().optional(),
       pageLabel: zod.string().nullish(),
       points: zod.number(),
+      comparison: zod
+        .object({
+          headers: zod
+            .array(zod.string())
+            .describe("Column headers — usually the concepts being compared."),
+          rows: zod.array(
+            zod.object({
+              label: zod
+                .string()
+                .describe("Row label (the property\/aspect being compared)."),
+              cells: zod
+                .array(zod.string())
+                .describe("Reference cell values, one per header."),
+            }),
+          ),
+        })
+        .optional()
+        .describe("Reference data for a comparison_table question."),
+      factors: zod
+        .array(zod.string())
+        .optional()
+        .describe("Reference list of factors for a list_factors question."),
+      oddOneOut: zod
+        .object({
+          different: zod
+            .string()
+            .describe("The literal odd word among `choices`."),
+          reason: zod
+            .string()
+            .describe("Reference reasoning explaining why it is the odd one."),
+        })
+        .optional()
+        .describe("Reference data for an odd_one_out question."),
     }),
   ),
   createdAt: zod.coerce.date(),
@@ -369,4 +483,10 @@ export const SubmitQuizAttemptBody = zod.object({
       userAnswer: zod.string(),
     }),
   ),
+  questionIds: zod
+    .array(zod.string())
+    .optional()
+    .describe(
+      'When set, only these question ids are graded and counted toward\nthe attempt\'s max score. Used by the \"retake wrong questions\nonly\" flow.\n',
+    ),
 });

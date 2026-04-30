@@ -47,8 +47,27 @@ export const QUIZ_QUESTION_TYPES = [
   "true_false",
   "fill_blank",
   "short_answer",
+  "comparison_table",
+  "list_factors",
+  "odd_one_out",
 ] as const;
 export type QuizQuestionType = (typeof QUIZ_QUESTION_TYPES)[number];
+
+/** Reference data for a `comparison_table` question. */
+export type StoredComparisonTable = {
+  /** Column headers — usually the concepts being compared. */
+  headers: string[];
+  /** Row label + the reference cell values, one per header. */
+  rows: { label: string; cells: string[] }[];
+};
+
+/** Reference data for an `odd_one_out` question. */
+export type StoredOddOneOut = {
+  /** The literal odd word among `choices`. */
+  different: string;
+  /** Reference reasoning explaining why it is the odd one. */
+  reason: string;
+};
 
 /**
  * One generated quiz question. Stored as JSON inside `quizzes.questions` so
@@ -58,10 +77,13 @@ export type StoredQuizQuestion = {
   id: string;
   type: QuizQuestionType;
   prompt: string;
-  /** For mcq / true_false: the candidate options. */
+  /** For mcq / true_false / odd_one_out: the candidate options. */
   choices?: string[];
   /** Reference (correct) answer in plain text. For mcq: the literal text of
-   *  the correct choice. For true_false: "صح" or "خطأ". */
+   *  the correct choice. For true_false: "صح" or "خطأ".
+   *  For comparison_table / list_factors / odd_one_out: a JSON-encoded
+   *  string of the corresponding reference shape (kept as text so the
+   *  existing `userAnswer:string` grading pipeline stays uniform). */
   correctAnswer: string;
   /** Short explanation (optional) shown when the user reviews the result. */
   explanation?: string;
@@ -69,6 +91,12 @@ export type StoredQuizQuestion = {
   pageNumber?: number;
   pageLabel?: string | null;
   points: number;
+  /** Reference data for `comparison_table` questions. */
+  comparison?: StoredComparisonTable;
+  /** Reference list of factors for a `list_factors` question. */
+  factors?: string[];
+  /** Reference for an `odd_one_out` question. */
+  oddOneOut?: StoredOddOneOut;
 };
 
 export type QuizSettings = {

@@ -617,7 +617,55 @@ components:
         - endPage
     QuizQuestionType:
       type: string
-      enum: [mcq, true_false, fill_blank, short_answer]
+      enum:
+        - mcq
+        - true_false
+        - fill_blank
+        - short_answer
+        - comparison_table
+        - list_factors
+        - odd_one_out
+    ComparisonTable:
+      type: object
+      description: Reference data for a comparison_table question.
+      properties:
+        headers:
+          type: array
+          items:
+            type: string
+          description: Column headers — usually the concepts being compared.
+        rows:
+          type: array
+          items:
+            type: object
+            properties:
+              label:
+                type: string
+                description: Row label (the property/aspect being compared).
+              cells:
+                type: array
+                items:
+                  type: string
+                description: Reference cell values, one per header.
+            required:
+              - label
+              - cells
+      required:
+        - headers
+        - rows
+    OddOneOut:
+      type: object
+      description: Reference data for an odd_one_out question.
+      properties:
+        different:
+          type: string
+          description: The literal odd word among `choices`.
+        reason:
+          type: string
+          description: Reference reasoning explaining why it is the odd one.
+      required:
+        - different
+        - reason
     QuizDifficulty:
       type: string
       enum: [easy, medium, hard, mixed]
@@ -656,6 +704,13 @@ components:
             type: string
         correctAnswer:
           type: string
+          description: |
+            For mcq/true_false: the literal correct option text.
+            For fill_blank/short_answer: the reference answer.
+            For comparison_table / list_factors / odd_one_out: a JSON-encoded
+            string of the same shape as `comparison`, `factors`, or
+            `oddOneOut` respectively (kept here for backward compatibility
+            with grading).
         explanation:
           type: string
         pageNumber:
@@ -664,6 +719,15 @@ components:
           type: ["string", "null"]
         points:
           type: integer
+        comparison:
+          $ref: "#/components/schemas/ComparisonTable"
+        factors:
+          type: array
+          items:
+            type: string
+          description: Reference list of factors for a list_factors question.
+        oddOneOut:
+          $ref: "#/components/schemas/OddOneOut"
       required:
         - id
         - type
@@ -786,6 +850,14 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/SubmitAttemptAnswer"
+        questionIds:
+          type: array
+          items:
+            type: string
+          description: |
+            When set, only these question ids are graded and counted toward
+            the attempt's max score. Used by the "retake wrong questions
+            only" flow.
       required:
         - answers
     UpdateDocumentPayload:

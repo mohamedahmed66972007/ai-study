@@ -14,4 +14,7 @@ export const QuizQuestionType = {
   true_false: "true_false",
   fill_blank: "fill_blank",
   short_answer: "short_answer",
+  comparison_table: "comparison_table",
+  list_factors: "list_factors",
+  odd_one_out: "odd_one_out",
 } as const;

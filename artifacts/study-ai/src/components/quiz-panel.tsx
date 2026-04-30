@@ -70,6 +70,9 @@ const QUESTION_TYPE_LABEL: Record<QuizQuestionType, string> = {
   true_false: "صح/خطأ",
   fill_blank: "أكمل الفراغ",
   short_answer: "إجابة قصيرة",
+  comparison_table: "جدول مقارنة",
+  list_factors: "اذكر العوامل",
+  odd_one_out: "ما المختلف؟",
 };
 
 const DIFFICULTY_LABEL: Record<QuizDifficulty, string> = {
@@ -84,13 +87,61 @@ const ALL_TYPES: QuizQuestionType[] = [
   "true_false",
   "fill_blank",
   "short_answer",
+  "comparison_table",
+  "list_factors",
+  "odd_one_out",
 ];
 
 type View =
   | { kind: "list" }
-  | { kind: "take"; quizId: number }
+  | { kind: "take"; quizId: number; onlyQuestionIds?: string[] }
   | { kind: "result"; attempt: QuizAttempt; quiz: Quiz }
   | { kind: "history"; quizId: number };
+
+/* ----------- Helpers for the new question types' user answers ----------- */
+
+function safeParse<T>(s: string): T | null {
+  if (!s) return null;
+  try {
+    return JSON.parse(s) as T;
+  } catch {
+    return null;
+  }
+}
+
+type FactorsAnswer = { factors: string[] };
+type OddAnswer = { different: string; reason: string };
+type TableAnswer = { rows: { label: string; cells: string[] }[] };
+
+function readFactors(value: string): string[] {
+  const p = safeParse<FactorsAnswer>(value);
+  if (p && Array.isArray(p.factors)) return p.factors.map((x) => String(x ?? ""));
+  return [""];
+}
+
+function readOdd(value: string): OddAnswer {
+  const p = safeParse<OddAnswer>(value);
+  if (p && typeof p === "object")
+    return { different: String(p.different ?? ""), reason: String(p.reason ?? "") };
+  return { different: "", reason: "" };
+}
+
+function readTable(value: string, rowCount: number, colCount: number): string[][] {
+  const p = safeParse<TableAnswer>(value);
+  const grid: string[][] = Array.from({ length: rowCount }, () =>
+    Array.from({ length: colCount }, () => ""),
+  );
+  if (p && Array.isArray(p.rows)) {
+    for (let i = 0; i < rowCount; i++) {
+      const r = p.rows[i];
+      if (!r || !Array.isArray(r.cells)) continue;
+      for (let j = 0; j < colCount; j++) {
+        grid[i]![j] = String(r.cells[j] ?? "");
+      }
+    }
+  }
+  return grid;
+}
 
 export function QuizPanel({ documentId }: { documentId: number }) {
   const [view, setView] = useState<View>({ kind: "list" });
@@ -100,6 +151,7 @@ export function QuizPanel({ documentId }: { documentId: number }) {
     return (
       <QuizTake
         quizId={view.quizId}
+        onlyQuestionIds={view.onlyQuestionIds}
         onExit={() => setView({ kind: "list" })}
         onResult={(attempt, quiz) => setView({ kind: "result", attempt, quiz })}
       />
@@ -121,6 +173,9 @@ export function QuizPanel({ documentId }: { documentId: number }) {
         onBack={() => setView({ kind: "list" })}
         onView={(attempt, quiz) =>
           setView({ kind: "result", attempt, quiz })
+        }
+        onRetakeWrong={(quizId, ids) =>
+          setView({ kind: "take", quizId, onlyQuestionIds: ids })
         }
       />
     );
@@ -534,7 +589,7 @@ function NewQuizDialog({
 
           <div className="space-y-2">
             <Label>أنواع الأسئلة</Label>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {ALL_TYPES.map((t) => (
                 <label
                   key={t}
@@ -634,10 +689,12 @@ function shuffle<T>(arr: T[], seed: number): T[] {
 
 function QuizTake({
   quizId,
+  onlyQuestionIds,
   onExit,
   onResult,
 }: {
   quizId: number;
+  onlyQuestionIds?: string[];
   onExit: () => void;
   onResult: (a: QuizAttempt, q: Quiz) => void;
 }) {
@@ -666,10 +723,12 @@ function QuizTake({
 
   const orderedQuestions = useMemo(() => {
     if (!quiz) return [];
-    return quiz.settings.randomizeQuestions
-      ? shuffle(quiz.questions, seed)
-      : quiz.questions;
-  }, [quiz, seed]);
+    const subset =
+      onlyQuestionIds && onlyQuestionIds.length > 0
+        ? quiz.questions.filter((q) => onlyQuestionIds.includes(q.id))
+        : quiz.questions;
+    return quiz.settings.randomizeQuestions ? shuffle(subset, seed) : subset;
+  }, [quiz, seed, onlyQuestionIds]);
 
   // initialize timer
   useEffect(() => {
@@ -700,52 +759,72 @@ function QuizTake({
   }
 
   const handleSubmit = () => {
+    const subsetIds = orderedQuestions.map((q) => q.id);
     submit.mutate({
       quizId,
       data: {
-        answers: quiz.questions.map((q) => ({
+        answers: orderedQuestions.map((q) => ({
           questionId: q.id,
           userAnswer: (answers[q.id] ?? "").trim(),
         })),
+        ...(onlyQuestionIds && onlyQuestionIds.length > 0
+          ? { questionIds: subsetIds }
+          : {}),
       },
     });
   };
 
-  const answeredCount = Object.values(answers).filter((a) => a.trim()).length;
+  const totalCount = orderedQuestions.length;
+  const answeredCount = orderedQuestions.filter((q) =>
+    (answers[q.id] ?? "").trim(),
+  ).length;
+  const isSubset = !!onlyQuestionIds && onlyQuestionIds.length > 0;
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 min-w-0">
-          <Button variant="ghost" size="icon" onClick={onExit}>
-            <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
-          </Button>
-          <div className="min-w-0">
-            <h2 className="text-lg font-extrabold truncate">{quiz.name}</h2>
-            <p className="text-xs text-muted-foreground">
-              {answeredCount} / {quiz.questions.length} أُجيب عنها
-            </p>
+      <div className="sticky top-0 -mx-4 md:-mx-6 px-4 md:px-6 py-3 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b border-border/60">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <Button variant="ghost" size="icon" onClick={onExit}>
+              <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
+            </Button>
+            <div className="min-w-0">
+              <h2 className="text-lg font-extrabold truncate flex items-center gap-2">
+                {quiz.name}
+                {isSubset && (
+                  <Badge variant="outline" className="text-[10px]">
+                    إعادة الأخطاء فقط
+                  </Badge>
+                )}
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                {answeredCount} / {totalCount} أُجيب عنها
+              </p>
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {secondsLeft !== null && (
-            <Badge
-              variant="secondary"
-              className={cn(
-                "font-mono",
-                secondsLeft < 60 && "bg-destructive/15 text-destructive",
-              )}
+          <div className="flex items-center gap-2">
+            {secondsLeft !== null && (
+              <Badge
+                variant="secondary"
+                className={cn(
+                  "font-mono text-base px-3 py-1",
+                  secondsLeft < 60 && "bg-destructive/15 text-destructive",
+                )}
+              >
+                {Math.floor(secondsLeft / 60)
+                  .toString()
+                  .padStart(2, "0")}
+                :
+                {(secondsLeft % 60).toString().padStart(2, "0")}
+              </Badge>
+            )}
+            <Button
+              onClick={() => setConfirmSubmit(true)}
+              disabled={submit.isPending}
             >
-              {Math.floor(secondsLeft / 60)
-                .toString()
-                .padStart(2, "0")}
-              :
-              {(secondsLeft % 60).toString().padStart(2, "0")}
-            </Badge>
-          )}
-          <Button onClick={() => setConfirmSubmit(true)} disabled={submit.isPending}>
-            تسليم
-          </Button>
+              تسليم
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -790,9 +869,9 @@ function QuizTake({
             <DialogTitle>تسليم الاختبار؟</DialogTitle>
             <DialogDescription>
               سيتم تصحيح إجاباتك تلقائيًا بناءً على المستند.
-              {answeredCount < quiz.questions.length && (
+              {answeredCount < totalCount && (
                 <span className="block mt-2 text-destructive font-medium">
-                  ⚠ لديك {quiz.questions.length - answeredCount} سؤال بدون إجابة.
+                  ⚠ لديك {totalCount - answeredCount} سؤال بدون إجابة.
                 </span>
               )}
             </DialogDescription>
@@ -835,6 +914,11 @@ function QuestionCard({
   const orderedChoices = useMemo(() => {
     if (!question.choices) return [];
     if (question.type === "true_false") return question.choices; // keep صح/خطأ
+    if (question.type === "odd_one_out") {
+      // Always randomize the 4 words for odd_one_out so the position
+      // doesn't leak the answer across runs.
+      return shuffle(question.choices, seed);
+    }
     return randomizeChoices ? shuffle(question.choices, seed) : question.choices;
   }, [question.choices, question.type, randomizeChoices, seed]);
 
@@ -890,12 +974,375 @@ function QuestionCard({
             rows={3}
           />
         )}
+
+        {question.type === "list_factors" && (
+          <ListFactorsInput value={value} onChange={onChange} />
+        )}
+
+        {question.type === "odd_one_out" && question.choices && (
+          <OddOneOutInput
+            value={value}
+            onChange={onChange}
+            choices={orderedChoices}
+          />
+        )}
+
+        {question.type === "comparison_table" && question.comparison && (
+          <ComparisonTableInput
+            value={value}
+            onChange={onChange}
+            comparison={question.comparison}
+          />
+        )}
       </CardContent>
     </Card>
   );
 }
 
+/* ---- Input widgets for the new question types ---- */
+
+function ListFactorsInput({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const items = readFactors(value);
+  const update = (next: string[]) => {
+    const cleaned = next.length === 0 ? [""] : next;
+    const trimmed = cleaned.map((x) => x.trim()).filter((x) => x.length > 0);
+    onChange(trimmed.length === 0 ? "" : JSON.stringify({ factors: trimmed }));
+  };
+  return (
+    <div className="space-y-2">
+      <p className="text-xs text-muted-foreground">
+        أضف العوامل التي تراها واحدًا تلو الآخر. اضغط "+" لإضافة عامل جديد.
+      </p>
+      {items.map((it, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <Input
+            value={it}
+            onChange={(e) => {
+              const next = [...items];
+              next[i] = e.target.value;
+              update(next);
+            }}
+            placeholder={`العامل ${i + 1}`}
+          />
+          {items.length > 1 && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="text-destructive hover:bg-destructive/10 shrink-0"
+              onClick={() => {
+                const next = items.filter((_, j) => j !== i);
+                update(next);
+              }}
+              aria-label="حذف هذا العامل"
+            >
+              <XCircle className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
+      ))}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="gap-1"
+        onClick={() => update([...items, ""])}
+      >
+        <Plus className="h-4 w-4" />
+        إضافة عامل آخر
+      </Button>
+    </div>
+  );
+}
+
+function OddOneOutInput({
+  value,
+  onChange,
+  choices,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  choices: string[];
+}) {
+  const cur = readOdd(value);
+  const update = (next: OddAnswer) => {
+    const isEmpty = !next.different.trim() && !next.reason.trim();
+    onChange(isEmpty ? "" : JSON.stringify(next));
+  };
+  return (
+    <div className="space-y-3">
+      <div className="space-y-2">
+        <p className="text-xs text-muted-foreground">اختر الكلمة المختلفة:</p>
+        <RadioGroup
+          value={cur.different}
+          onValueChange={(v) => update({ ...cur, different: v })}
+        >
+          <div className="grid grid-cols-2 gap-2">
+            {choices.map((c, i) => (
+              <label
+                key={`${i}-${c}`}
+                className={cn(
+                  "flex items-center gap-2 border rounded-md p-3 cursor-pointer hover:bg-muted/40",
+                  cur.different === c && "border-primary bg-primary/5",
+                )}
+              >
+                <RadioGroupItem value={c} />
+                <span className="text-sm leading-relaxed">{c}</span>
+              </label>
+            ))}
+          </div>
+        </RadioGroup>
+      </div>
+      <div className="space-y-2">
+        <p className="text-xs text-muted-foreground">اذكر سبب اختلافها:</p>
+        <Textarea
+          value={cur.reason}
+          onChange={(e) => update({ ...cur, reason: e.target.value })}
+          placeholder="اشرح باختصار سبب اختلاف هذه الكلمة عن البقية…"
+          rows={2}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ComparisonTableInput({
+  value,
+  onChange,
+  comparison,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  comparison: NonNullable<QuizQuestion["comparison"]>;
+}) {
+  const headers = comparison.headers;
+  const rows = comparison.rows;
+  const grid = readTable(value, rows.length, headers.length);
+  const update = (i: number, j: number, v: string) => {
+    const next = grid.map((r) => [...r]);
+    next[i]![j] = v;
+    const anyFilled = next.some((r) => r.some((c) => c.trim().length > 0));
+    if (!anyFilled) {
+      onChange("");
+      return;
+    }
+    onChange(
+      JSON.stringify({
+        rows: rows.map((r, ri) => ({ label: r.label, cells: next[ri]! })),
+      }),
+    );
+  };
+  return (
+    <div className="space-y-2">
+      <p className="text-xs text-muted-foreground">
+        املأ خلايا الجدول التالي بناءً على ما درسته:
+      </p>
+      <div className="overflow-x-auto border rounded-md">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/50">
+            <tr>
+              <th className="text-start p-2 font-semibold w-[28%] min-w-[120px]">
+                وجه المقارنة
+              </th>
+              {headers.map((h, j) => (
+                <th
+                  key={`h-${j}`}
+                  className="text-start p-2 font-semibold min-w-[140px]"
+                >
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, i) => (
+              <tr key={`r-${i}`} className="border-t">
+                <td className="p-2 align-top font-medium bg-muted/20">
+                  {row.label}
+                </td>
+                {headers.map((_, j) => (
+                  <td key={`c-${i}-${j}`} className="p-1.5 align-top">
+                    <Textarea
+                      value={grid[i]?.[j] ?? ""}
+                      onChange={(e) => update(i, j, e.target.value)}
+                      rows={2}
+                      className="min-h-[64px] resize-y"
+                      placeholder="…"
+                    />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 /* --------------------------- RESULT ---------------------------- */
+
+function AnswerDisplay({
+  question,
+  text,
+  verdict,
+}: {
+  question: QuizQuestion;
+  text: string;
+  verdict: string | undefined;
+}) {
+  const colorCls =
+    verdict === "correct"
+      ? "bg-emerald-500/5 border-emerald-500/30"
+      : verdict === "partial"
+      ? "bg-amber-500/5 border-amber-500/30"
+      : "bg-destructive/5 border-destructive/30";
+  if (!text) {
+    return (
+      <p
+        className={cn(
+          "rounded-md p-2 border italic text-muted-foreground",
+          colorCls,
+        )}
+      >
+        لم تُجِب
+      </p>
+    );
+  }
+  if (question.type === "list_factors") {
+    const arr = readFactors(text).filter((x) => x.trim().length > 0);
+    return (
+      <ul className={cn("rounded-md p-2 border list-disc pr-4", colorCls)}>
+        {arr.map((x, i) => (
+          <li key={i}>{x}</li>
+        ))}
+      </ul>
+    );
+  }
+  if (question.type === "odd_one_out") {
+    const o = readOdd(text);
+    return (
+      <div className={cn("rounded-md p-2 border space-y-1 text-sm", colorCls)}>
+        <p>
+          <span className="font-semibold">المختلف: </span>
+          {o.different || <em className="text-muted-foreground">—</em>}
+        </p>
+        <p>
+          <span className="font-semibold">السبب: </span>
+          {o.reason || <em className="text-muted-foreground">—</em>}
+        </p>
+      </div>
+    );
+  }
+  if (question.type === "comparison_table" && question.comparison) {
+    const grid = readTable(
+      text,
+      question.comparison.rows.length,
+      question.comparison.headers.length,
+    );
+    return (
+      <div className={cn("rounded-md border overflow-x-auto", colorCls)}>
+        <table className="w-full text-xs">
+          <thead className="bg-muted/40">
+            <tr>
+              <th className="text-start p-1.5"></th>
+              {question.comparison.headers.map((h, j) => (
+                <th key={j} className="text-start p-1.5 font-semibold">
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {question.comparison.rows.map((r, i) => (
+              <tr key={i} className="border-t">
+                <td className="p-1.5 font-medium bg-muted/20">{r.label}</td>
+                {question.comparison!.headers.map((_, j) => (
+                  <td key={j} className="p-1.5 align-top whitespace-pre-line">
+                    {grid[i]?.[j] || (
+                      <span className="text-muted-foreground italic">—</span>
+                    )}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+  return (
+    <p className={cn("rounded-md p-2 border whitespace-pre-line", colorCls)}>
+      {text}
+    </p>
+  );
+}
+
+function ReferenceDisplay({ question }: { question: QuizQuestion }) {
+  const ok = "rounded-md p-2 border border-emerald-500/30 bg-emerald-500/5";
+  if (question.type === "list_factors" && question.factors) {
+    return (
+      <ul className={cn(ok, "list-disc pr-4 text-sm")}>
+        {question.factors.map((x, i) => (
+          <li key={i}>{x}</li>
+        ))}
+      </ul>
+    );
+  }
+  if (question.type === "odd_one_out" && question.oddOneOut) {
+    return (
+      <div className={cn(ok, "space-y-1 text-sm")}>
+        <p>
+          <span className="font-semibold">المختلف: </span>
+          {question.oddOneOut.different}
+        </p>
+        <p>
+          <span className="font-semibold">السبب: </span>
+          {question.oddOneOut.reason}
+        </p>
+      </div>
+    );
+  }
+  if (question.type === "comparison_table" && question.comparison) {
+    return (
+      <div className={cn(ok, "overflow-x-auto p-0")}>
+        <table className="w-full text-xs">
+          <thead className="bg-emerald-500/10">
+            <tr>
+              <th className="text-start p-1.5"></th>
+              {question.comparison.headers.map((h, j) => (
+                <th key={j} className="text-start p-1.5 font-semibold">
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {question.comparison.rows.map((r, i) => (
+              <tr key={i} className="border-t">
+                <td className="p-1.5 font-medium bg-muted/20">{r.label}</td>
+                {r.cells.map((c, j) => (
+                  <td key={j} className="p-1.5 align-top whitespace-pre-line">
+                    {c}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+  return (
+    <p className={cn(ok, "whitespace-pre-line")}>{question.correctAnswer}</p>
+  );
+}
 
 function verdictBadge(v: string) {
   if (v === "correct")
@@ -984,77 +1431,69 @@ function QuizResultView({
       </h3>
 
       <div className="space-y-4">
-        {quiz.questions.map((q, i) => {
-          const item = itemByQid.get(q.id);
-          return (
-            <Card key={q.id} className="border-border/60">
-              <CardContent className="p-5 space-y-3">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-start gap-2 flex-1 min-w-0">
-                    <Badge variant="outline" className="shrink-0 mt-0.5">
-                      {i + 1}
-                    </Badge>
-                    <p className="font-medium leading-relaxed whitespace-pre-line">
-                      {q.prompt}
-                    </p>
+        {quiz.questions
+          .filter((q) => itemByQid.has(q.id))
+          .map((q, i) => {
+            const item = itemByQid.get(q.id);
+            return (
+              <Card key={q.id} className="border-border/60">
+                <CardContent className="p-5 space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-start gap-2 flex-1 min-w-0">
+                      <Badge variant="outline" className="shrink-0 mt-0.5">
+                        {i + 1}
+                      </Badge>
+                      <p className="font-medium leading-relaxed whitespace-pre-line">
+                        {q.prompt}
+                      </p>
+                    </div>
+                    {item && verdictBadge(item.verdict)}
                   </div>
-                  {item && verdictBadge(item.verdict)}
-                </div>
-                <Separator />
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground">إجابتك:</p>
-                    <p
-                      className={cn(
-                        "rounded-md p-2 border whitespace-pre-line",
-                        item?.verdict === "correct"
-                          ? "bg-emerald-500/5 border-emerald-500/30"
-                          : item?.verdict === "partial"
-                          ? "bg-amber-500/5 border-amber-500/30"
-                          : "bg-destructive/5 border-destructive/30",
-                        !item?.userAnswer && "italic text-muted-foreground",
+                  <Separator />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground">إجابتك:</p>
+                      <AnswerDisplay
+                        question={q}
+                        text={item?.userAnswer ?? ""}
+                        verdict={item?.verdict}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground">
+                        الإجابة الصحيحة:
+                      </p>
+                      <ReferenceDisplay question={q} />
+                    </div>
+                  </div>
+                  {(item?.feedback || q.explanation) && (
+                    <div className="text-xs bg-muted/40 rounded-md p-2 space-y-1">
+                      {item?.feedback && (
+                        <p>
+                          <span className="font-semibold">ملاحظة المصحح: </span>
+                          {item.feedback}
+                        </p>
                       )}
-                    >
-                      {item?.userAnswer || "لم تُجِب"}
-                    </p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground">
-                      الإجابة الصحيحة:
-                    </p>
-                    <p className="rounded-md p-2 border border-emerald-500/30 bg-emerald-500/5 whitespace-pre-line">
-                      {q.correctAnswer}
-                    </p>
-                  </div>
-                </div>
-                {(item?.feedback || q.explanation) && (
-                  <div className="text-xs bg-muted/40 rounded-md p-2 space-y-1">
-                    {item?.feedback && (
-                      <p>
-                        <span className="font-semibold">ملاحظة المصحح: </span>
-                        {item.feedback}
-                      </p>
-                    )}
-                    {q.explanation && (
-                      <p>
-                        <span className="font-semibold">تفسير: </span>
-                        {q.explanation}
-                      </p>
-                    )}
-                    {q.pageNumber && (
-                      <p className="text-muted-foreground">
-                        المصدر: صفحة {q.pageNumber}
-                        {q.pageLabel && q.pageLabel !== String(q.pageNumber)
-                          ? ` (المطبوع ${q.pageLabel})`
-                          : ""}
-                      </p>
-                    )}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          );
-        })}
+                      {q.explanation && (
+                        <p>
+                          <span className="font-semibold">تفسير: </span>
+                          {q.explanation}
+                        </p>
+                      )}
+                      {q.pageNumber && (
+                        <p className="text-muted-foreground">
+                          المصدر: صفحة {q.pageNumber}
+                          {q.pageLabel && q.pageLabel !== String(q.pageNumber)
+                            ? ` (المطبوع ${q.pageLabel})`
+                            : ""}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
       </div>
 
       <Button onClick={onClose} className="w-full" size="lg">
@@ -1070,10 +1509,12 @@ function QuizHistoryView({
   quizId,
   onBack,
   onView,
+  onRetakeWrong,
 }: {
   quizId: number;
   onBack: () => void;
   onView: (a: QuizAttempt, q: Quiz) => void;
+  onRetakeWrong: (quizId: number, questionIds: string[]) => void;
 }) {
   const { data: quiz } = useGetQuiz(quizId);
   const { data: attempts, isLoading } = useListQuizAttempts(quizId, {
@@ -1107,6 +1548,14 @@ function QuizHistoryView({
             {attempts.map((a) => {
               const pct =
                 a.maxScore > 0 ? Math.round((a.score / a.maxScore) * 100) : 0;
+              const wrongIds = a.items
+                .filter(
+                  (it) =>
+                    it.verdict === "wrong" ||
+                    it.verdict === "partial" ||
+                    it.verdict === "empty",
+                )
+                .map((it) => it.questionId);
               return (
                 <motion.div
                   key={a.id}
@@ -1114,25 +1563,40 @@ function QuizHistoryView({
                   animate={{ opacity: 1, y: 0 }}
                 >
                   <Card className="border-border/60 hover-elevate">
-                    <CardContent className="p-4 flex items-center justify-between gap-3">
-                      <div>
-                        <p className="font-semibold">
-                          {a.score} / {a.maxScore}{" "}
-                          <span className="text-muted-foreground">({pct}%)</span>
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {format(new Date(a.createdAt), "PPpp", {
-                            locale: ar,
-                          })}
-                        </p>
+                    <CardContent className="p-4 space-y-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="font-semibold">
+                            {a.score} / {a.maxScore}{" "}
+                            <span className="text-muted-foreground">
+                              ({pct}%)
+                            </span>
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {format(new Date(a.createdAt), "PPpp", {
+                              locale: ar,
+                            })}
+                          </p>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => onView(a, quiz)}
+                        >
+                          عرض التفاصيل
+                        </Button>
                       </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onView(a, quiz)}
-                      >
-                        عرض التفاصيل
-                      </Button>
+                      {wrongIds.length > 0 && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          className="w-full gap-2"
+                          onClick={() => onRetakeWrong(quizId, wrongIds)}
+                        >
+                          <ClipboardCheck className="h-4 w-4" />
+                          أعد فقط الأسئلة الخاطئة ({wrongIds.length})
+                        </Button>
+                      )}
                     </CardContent>
                   </Card>
                 </motion.div>

@@ -57,12 +57,40 @@ sun/moon toggle and a palette dropdown with color swatches.
   - **Quizzes tab**: lists auto-detected chapters, saved quizzes, and
     a "new quiz" dialog. Quiz settings: name, count (or "cover all"),
     difficulty (easy/medium/hard/mixed), question types (MCQ /
-    true-false / fill-blank / short-answer), randomize Qs/choices,
-    optional time limit. Quiz-taking screen has per-question cards,
-    optional countdown, and a confirm-before-submit dialog. After
-    submission, results screen shows verdicts (correct / partial /
-    wrong / empty), AI feedback, the correct answer, source page,
-    and a quiz-level percent. Per-quiz attempt history is also viewable.
+    true-false / fill-blank / short-answer / **comparison-table** /
+    **list-factors** / **odd-one-out**), randomize Qs/choices,
+    optional time limit. Quiz-taking screen has per-question cards
+    and a **sticky header** at the top of the scrolling pane with the
+    countdown timer + submit button so they stay visible while
+    scrolling. After submission, results screen shows verdicts
+    (correct / partial / wrong / empty), AI feedback, the correct
+    answer rendered as a table / bullet list / "different + reason"
+    block depending on the type, source page, and a quiz-level
+    percent. Per-quiz attempt history view shows each past attempt
+    with a **"retake wrong questions only"** button that opens the
+    quiz pre-filtered to just the questions the student got wrong /
+    partial / empty.
+
+### Quiz question-type formats
+
+All three new types still travel through the existing `QuizQuestion`
+shape, with type-specific reference data attached:
+
+- `comparison_table` → `comparison: { headers: string[]; rows: { label: string; cells: string[] }[] }`. The student fills cells in a table; user answer is JSON `{ rows: [{ label, cells }] }`. Graded per-cell (local exact/contains, AI fallback per cell).
+- `list_factors` → `factors: string[]`. The UI starts with one input box and a "+" button to add more (the count is hidden from the student). User answer is JSON `{ factors: string[] }`. Graded by set-membership against the canonical list with mild penalties for extras.
+- `odd_one_out` → `choices: [4 strings]` + `oddOneOut: { different, reason }`. The UI shows the 4 words as radio buttons (always shuffled) plus a textarea for the reason. User answer is JSON `{ different, reason }`. Graded 50% for the right word + 50% for the reason (AI-judged when local heuristics miss).
+
+`StoredQuizQuestion.correctAnswer` is kept as a string for all types
+(JSON-encoded for the three new types) so the legacy grading pipeline
+and `userAnswer:string` storage stay uniform.
+
+### Retake-wrong-only flow
+
+`POST /api/quizzes/:quizId/attempts` accepts an optional
+`questionIds: string[]` filter. When set, only those questions are
+graded and counted toward the attempt's `score` / `maxScore`, so a
+"retake wrong only" run produces an honest sub-score rather than
+zero-filling the rest of the quiz.
 
 ## API endpoints
 

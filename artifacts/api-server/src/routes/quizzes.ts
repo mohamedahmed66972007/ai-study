@@ -10,6 +10,7 @@ import {
   type StoredQuizQuestion,
   type StoredAttemptItem,
   type QuizSettings,
+  QUIZ_QUESTION_TYPES,
 } from "@workspace/db";
 import { extractChapters } from "../lib/chapters";
 import { generateQuiz, gradeAnswer } from "../lib/quiz";
@@ -181,12 +182,11 @@ router.post(
       allowedTypes:
         Array.isArray(settingsIn.allowedTypes) &&
         settingsIn.allowedTypes.length > 0
-          ? settingsIn.allowedTypes.filter((t): t is QuizSettings["allowedTypes"][number] =>
-              ["mcq", "true_false", "fill_blank", "short_answer"].includes(
-                String(t),
-              ),
+          ? settingsIn.allowedTypes.filter(
+              (t): t is QuizSettings["allowedTypes"][number] =>
+                (QUIZ_QUESTION_TYPES as readonly string[]).includes(String(t)),
             )
-          : ["mcq", "true_false", "fill_blank", "short_answer"],
+          : [...QUIZ_QUESTION_TYPES],
     };
     if (!name) {
       res.status(400).json({ error: "اسم الاختبار مطلوب" });
@@ -352,8 +352,11 @@ router.post(
       res.status(400).json({ error: "معرف غير صالح" });
       return;
     }
-    const body = req.body as { answers?: unknown };
+    const body = req.body as { answers?: unknown; questionIds?: unknown };
     const answersIn = Array.isArray(body?.answers) ? body!.answers : [];
+    const subsetIdsIn = Array.isArray(body?.questionIds)
+      ? body!.questionIds
+      : null;
 
     const [quiz] = await db
       .select()
@@ -390,7 +393,20 @@ router.post(
     const items: StoredAttemptItem[] = [];
     let totalScore = 0;
     let maxScore = 0;
-    const questions = (quiz.questions ?? []) as StoredQuizQuestion[];
+    const allQuestions = (quiz.questions ?? []) as StoredQuizQuestion[];
+    // Optional subset filter: when set, only these questions count toward
+    // the attempt (used by the "retake wrong questions only" flow).
+    const subsetSet =
+      subsetIdsIn && subsetIdsIn.length > 0
+        ? new Set(subsetIdsIn.map((x) => String(x)))
+        : null;
+    const questions = subsetSet
+      ? allQuestions.filter((q) => subsetSet.has(q.id))
+      : allQuestions;
+    if (questions.length === 0) {
+      res.status(400).json({ error: "لا توجد أسئلة للتصحيح." });
+      return;
+    }
 
     // Grade in parallel batches to keep latency reasonable.
     const concurrency = 4;

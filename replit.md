@@ -47,23 +47,32 @@ sun/moon toggle and a palette dropdown with color swatches.
 - `/` — Library home: stats strip (3 metrics), document cards with delete,
   recent questions feed, prominent upload CTA.
 - `/upload` — Drag-and-drop PDF upload (max 25 MB, PDF only) with title
-  field. Posts multipart to `POST /api/documents`, then navigates to the
-  document.
-- `/documents/:id` — Two-pane chat: Q&A history on the right, source
-  viewer on the left. Citation chips load the cited page in the source
-  viewer. Auto-polls while status is "processing". The composer at the
-  bottom has a text input plus an inline **image button** that opens a
-  preview dialog and uploads the image to the extract-and-answer
-  endpoint.
+  field and a **kind toggle** (`curriculum` vs `question_bank`). Posts
+  multipart to `POST /api/documents`, then navigates to the document.
+- `/documents/:id` — Two-pane chat with two tabs:
+  - **Q&A tab**: history on the right, source viewer on the left.
+    Citation chips load the cited page. Auto-polls while status is
+    "processing". The composer has a text input plus an inline
+    **image button** for extracting questions from a photo.
+  - **Quizzes tab**: lists auto-detected chapters, saved quizzes, and
+    a "new quiz" dialog. Quiz settings: name, count (or "cover all"),
+    difficulty (easy/medium/hard/mixed), question types (MCQ /
+    true-false / fill-blank / short-answer), randomize Qs/choices,
+    optional time limit. Quiz-taking screen has per-question cards,
+    optional countdown, and a confirm-before-submit dialog. After
+    submission, results screen shows verdicts (correct / partial /
+    wrong / empty), AI feedback, the correct answer, source page,
+    and a quiz-level percent. Per-quiz attempt history is also viewable.
 
 ## API endpoints
 
 - `GET    /api/healthz`
 - `GET    /api/stats` — library aggregate stats
 - `GET    /api/documents` — list
-- `POST   /api/documents` — multipart upload (`file`, `title`); kicks off
-  async PDF parsing
+- `POST   /api/documents` — multipart upload (`file`, `title`, optional
+  `kind`); kicks off async PDF parsing
 - `GET    /api/documents/:id`
+- `PATCH  /api/documents/:id` — update `title` and/or `kind`
 - `DELETE /api/documents/:id`
 - `GET    /api/documents/:id/file` — original PDF bytes for the source viewer
 - `GET    /api/documents/:id/pages/:pageNumber`
@@ -75,12 +84,25 @@ sun/moon toggle and a palette dropdown with color swatches.
   `questionsTable`. Returns the array of created `QuestionRecord`s.
 - `GET    /api/documents/recent-questions` — latest 10 questions across
   all documents.
+- `GET    /api/documents/:id/chapters` — auto-extracts chapters on first
+  call (cached in `document_chapters`).
+- `POST   /api/documents/:id/quizzes` — generate a quiz from selected
+  chapters (or all chapters when none selected) using Gemini.
+- `GET    /api/documents/:id/quizzes` — list saved quizzes.
+- `GET    /api/quizzes/:quizId` / `DELETE /api/quizzes/:quizId`
+- `POST   /api/quizzes/:quizId/attempts` — submit answers; returns a
+  graded `QuizAttempt` (MCQ/TF graded locally with Arabic normalization;
+  fill-blank and short-answer fall back to AI judging from the document).
+- `GET    /api/quizzes/:quizId/attempts` — attempt history.
 
 ## Data model
 
-- `documents` (id, title, filename, total_pages, status `processing|ready|failed`, error_message, file_data bytea, created_at)
+- `documents` (id, title, filename, total_pages, status `processing|ready|failed`, error_message, file_data bytea, **kind** `curriculum|question_bank`, created_at)
 - `document_pages` (id, document_id, page_number, page_label, content) — extracted per-page text. `page_label` is the printed page label parsed from the PDF (e.g. roman numerals, or a number that differs from the PDF index); null when the PDF doesn't provide one or when it matches the PDF index.
 - `questions` (id, document_id, question, answer, citations jsonb, created_at). Each citation stores `{ pageNumber, pageLabel?, quote }` — `pageNumber` is the PDF index used for navigation, `pageLabel` (when present) is the printed label shown alongside it in the UI.
+- `document_chapters` (id, document_id, order_index, title, summary, start_page, end_page) — cached chapter extraction per document.
+- `quizzes` (id, document_id, name, chapter_ids jsonb int[], settings jsonb `QuizSettings`, questions jsonb `QuizQuestion[]`, created_at).
+- `quiz_attempts` (id, quiz_id, items jsonb `AttemptItem[]`, score, max_score, completed bool, created_at).
 
 ## AI strategy
 

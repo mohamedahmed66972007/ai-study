@@ -13,7 +13,10 @@ import {
   AlertCircle,
   Loader2,
   ArrowRight,
+  BookOpen,
+  ListChecks,
 } from "lucide-react";
+import { cn as cnBase } from "@/lib/utils";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -32,6 +35,9 @@ export function Upload() {
   const [isDragging, setIsDragging] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
+  const [kind, setKind] = useState<"curriculum" | "question_bank">(
+    "curriculum",
+  );
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -76,6 +82,7 @@ export function Upload() {
     const formData = new FormData();
     formData.append("file", file);
     formData.append("title", title.trim());
+    formData.append("kind", kind);
     try {
       const response = await fetch(
         `${import.meta.env.BASE_URL}api/documents`,
@@ -191,6 +198,66 @@ export function Upload() {
                       placeholder="أدخل عنواناً للمستند…"
                       disabled={isUploading}
                     />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>نوع الملف</Label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        disabled={isUploading}
+                        onClick={() => setKind("curriculum")}
+                        className={cnBase(
+                          "border-2 rounded-xl p-4 text-right transition-colors flex items-start gap-3 hover-elevate active-elevate-2",
+                          kind === "curriculum"
+                            ? "border-primary bg-primary/5"
+                            : "border-border hover:border-primary/40",
+                        )}
+                        data-testid="button-kind-curriculum"
+                      >
+                        <BookOpen
+                          className={cnBase(
+                            "h-5 w-5 mt-0.5 shrink-0",
+                            kind === "curriculum"
+                              ? "text-primary"
+                              : "text-muted-foreground",
+                          )}
+                        />
+                        <div>
+                          <p className="font-semibold text-sm">منهج دراسي</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            كتاب أو مذكرة — سيُولّد الذكاء الاصطناعي الأسئلة منه
+                          </p>
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isUploading}
+                        onClick={() => setKind("question_bank")}
+                        className={cnBase(
+                          "border-2 rounded-xl p-4 text-right transition-colors flex items-start gap-3 hover-elevate active-elevate-2",
+                          kind === "question_bank"
+                            ? "border-primary bg-primary/5"
+                            : "border-border hover:border-primary/40",
+                        )}
+                        data-testid="button-kind-questionbank"
+                      >
+                        <ListChecks
+                          className={cnBase(
+                            "h-5 w-5 mt-0.5 shrink-0",
+                            kind === "question_bank"
+                              ? "text-primary"
+                              : "text-muted-foreground",
+                          )}
+                        />
+                        <div>
+                          <p className="font-semibold text-sm">بنك أسئلة</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            ملف فيه أسئلة وإجاباتها — سيستخرجها الذكاء الاصطناعي
+                          </p>
+                        </div>
+                      </button>
+                    </div>
                   </div>
 
                   <Button

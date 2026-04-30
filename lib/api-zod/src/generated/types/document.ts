@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { DocumentKind } from "./documentKind";
 import type { DocumentStatus } from "./documentStatus";
 
 export interface Document {
@@ -15,6 +16,7 @@ export interface Document {
   status: DocumentStatus;
   /** @nullable */
   errorMessage: string | null;
+  kind: DocumentKind;
   questionCount: number;
   createdAt: Date;
 }

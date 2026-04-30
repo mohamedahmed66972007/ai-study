@@ -23,6 +23,9 @@ export const documentsTable = pgTable("documents", {
   totalPages: integer("total_pages").notNull().default(0),
   status: text("status").notNull().default("processing"),
   errorMessage: text("error_message"),
+  /** "curriculum" = AI generates questions from the content.
+   *  "question_bank" = the file already contains Q&A and AI extracts them. */
+  kind: text("kind").notNull().default("curriculum"),
   fileData: bytea("file_data"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()

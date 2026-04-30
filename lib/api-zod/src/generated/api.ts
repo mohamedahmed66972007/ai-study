@@ -36,6 +36,7 @@ export const ListDocumentsResponseItem = zod.object({
   totalPages: zod.number(),
   status: zod.enum(["processing", "ready", "failed"]),
   errorMessage: zod.string().nullable(),
+  kind: zod.enum(["curriculum", "question_bank"]),
   questionCount: zod.number(),
   createdAt: zod.coerce.date(),
 });
@@ -55,6 +56,7 @@ export const GetDocumentResponse = zod.object({
   totalPages: zod.number(),
   status: zod.enum(["processing", "ready", "failed"]),
   errorMessage: zod.string().nullable(),
+  kind: zod.enum(["curriculum", "question_bank"]),
   questionCount: zod.number(),
   createdAt: zod.coerce.date(),
 });
@@ -64,6 +66,30 @@ export const GetDocumentResponse = zod.object({
  */
 export const DeleteDocumentParams = zod.object({
   id: zod.coerce.number(),
+});
+
+/**
+ * @summary Update document properties (title and/or kind)
+ */
+export const UpdateDocumentParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateDocumentBody = zod.object({
+  title: zod.string().optional(),
+  kind: zod.enum(["curriculum", "question_bank"]).optional(),
+});
+
+export const UpdateDocumentResponse = zod.object({
+  id: zod.number(),
+  title: zod.string(),
+  filename: zod.string(),
+  totalPages: zod.number(),
+  status: zod.enum(["processing", "ready", "failed"]),
+  errorMessage: zod.string().nullable(),
+  kind: zod.enum(["curriculum", "question_bank"]),
+  questionCount: zod.number(),
+  createdAt: zod.coerce.date(),
 });
 
 /**
@@ -168,3 +194,179 @@ export const ListRecentQuestionsResponseItem = zod.object({
 export const ListRecentQuestionsResponse = zod.array(
   ListRecentQuestionsResponseItem,
 );
+
+/**
+ * Extracts chapters lazily on first call and caches them.
+ * @summary List the auto-detected chapters of a document
+ */
+export const ListDocumentChaptersParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const ListDocumentChaptersResponseItem = zod.object({
+  id: zod.number(),
+  documentId: zod.number(),
+  orderIndex: zod.number(),
+  title: zod.string(),
+  summary: zod.string().nullable(),
+  startPage: zod.number(),
+  endPage: zod.number(),
+});
+export const ListDocumentChaptersResponse = zod.array(
+  ListDocumentChaptersResponseItem,
+);
+
+/**
+ * @summary List saved quizzes for this document
+ */
+export const ListDocumentQuizzesParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const ListDocumentQuizzesResponseItem = zod.object({
+  id: zod.number(),
+  documentId: zod.number(),
+  name: zod.string(),
+  chapterIds: zod.array(zod.number()),
+  settings: zod.object({
+    randomizeQuestions: zod.boolean(),
+    randomizeChoices: zod.boolean(),
+    timeLimitMinutes: zod.number().nullish(),
+    difficulty: zod.enum(["easy", "medium", "hard", "mixed"]),
+    allowedTypes: zod.array(
+      zod.enum(["mcq", "true_false", "fill_blank", "short_answer"]),
+    ),
+  }),
+  questions: zod.array(
+    zod.object({
+      id: zod.string(),
+      type: zod.enum(["mcq", "true_false", "fill_blank", "short_answer"]),
+      prompt: zod.string(),
+      choices: zod.array(zod.string()).optional(),
+      correctAnswer: zod.string(),
+      explanation: zod.string().optional(),
+      pageNumber: zod.number().optional(),
+      pageLabel: zod.string().nullish(),
+      points: zod.number(),
+    }),
+  ),
+  createdAt: zod.coerce.date(),
+});
+export const ListDocumentQuizzesResponse = zod.array(
+  ListDocumentQuizzesResponseItem,
+);
+
+/**
+ * @summary Generate and save a new quiz from selected chapters
+ */
+export const CreateDocumentQuizParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const createDocumentQuizBodyCountMax = 50;
+
+export const CreateDocumentQuizBody = zod.object({
+  name: zod.string().min(1),
+  chapterIds: zod
+    .array(zod.number())
+    .optional()
+    .describe('Empty array means \"all chapters \/ whole document\".'),
+  count: zod.number().min(1).max(createDocumentQuizBodyCountMax),
+  settings: zod.object({
+    randomizeQuestions: zod.boolean(),
+    randomizeChoices: zod.boolean(),
+    timeLimitMinutes: zod.number().nullish(),
+    difficulty: zod.enum(["easy", "medium", "hard", "mixed"]),
+    allowedTypes: zod.array(
+      zod.enum(["mcq", "true_false", "fill_blank", "short_answer"]),
+    ),
+  }),
+});
+
+/**
+ * @summary Get one quiz with all its questions
+ */
+export const GetQuizParams = zod.object({
+  quizId: zod.coerce.number(),
+});
+
+export const GetQuizResponse = zod.object({
+  id: zod.number(),
+  documentId: zod.number(),
+  name: zod.string(),
+  chapterIds: zod.array(zod.number()),
+  settings: zod.object({
+    randomizeQuestions: zod.boolean(),
+    randomizeChoices: zod.boolean(),
+    timeLimitMinutes: zod.number().nullish(),
+    difficulty: zod.enum(["easy", "medium", "hard", "mixed"]),
+    allowedTypes: zod.array(
+      zod.enum(["mcq", "true_false", "fill_blank", "short_answer"]),
+    ),
+  }),
+  questions: zod.array(
+    zod.object({
+      id: zod.string(),
+      type: zod.enum(["mcq", "true_false", "fill_blank", "short_answer"]),
+      prompt: zod.string(),
+      choices: zod.array(zod.string()).optional(),
+      correctAnswer: zod.string(),
+      explanation: zod.string().optional(),
+      pageNumber: zod.number().optional(),
+      pageLabel: zod.string().nullish(),
+      points: zod.number(),
+    }),
+  ),
+  createdAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Delete a quiz and all its attempts
+ */
+export const DeleteQuizParams = zod.object({
+  quizId: zod.coerce.number(),
+});
+
+/**
+ * @summary List all past attempts for a quiz, newest first
+ */
+export const ListQuizAttemptsParams = zod.object({
+  quizId: zod.coerce.number(),
+});
+
+export const ListQuizAttemptsResponseItem = zod.object({
+  id: zod.number(),
+  quizId: zod.number(),
+  items: zod.array(
+    zod.object({
+      questionId: zod.string(),
+      userAnswer: zod.string(),
+      score: zod
+        .number()
+        .describe("Fractional score 0..1 awarded for this question."),
+      verdict: zod.enum(["correct", "partial", "wrong", "empty"]),
+      feedback: zod.string().optional(),
+    }),
+  ),
+  score: zod.number(),
+  maxScore: zod.number(),
+  completed: zod.boolean(),
+  createdAt: zod.coerce.date(),
+});
+export const ListQuizAttemptsResponse = zod.array(ListQuizAttemptsResponseItem);
+
+/**
+ * @summary Submit answers and get the graded attempt back
+ */
+export const SubmitQuizAttemptParams = zod.object({
+  quizId: zod.coerce.number(),
+});
+
+export const SubmitQuizAttemptBody = zod.object({
+  answers: zod.array(
+    zod.object({
+      questionId: zod.string(),
+      userAnswer: zod.string(),
+    }),
+  ),
+});

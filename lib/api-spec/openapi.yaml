@@ -97,6 +97,35 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+    patch:
+      operationId: updateDocument
+      tags: [documents]
+      summary: Update document properties (title and/or kind)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateDocumentPayload"
+      responses:
+        "200":
+          description: Updated document
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Document"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /documents/{id}/pages/{pageNumber}:
     get:
       operationId: getDocumentPage
@@ -233,6 +262,180 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/RecentQuestion"
+  /documents/{id}/chapters:
+    get:
+      operationId: listDocumentChapters
+      tags: [quizzes]
+      summary: List the auto-detected chapters of a document
+      description: Extracts chapters lazily on first call and caches them.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Chapters
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Chapter"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /documents/{id}/quizzes:
+    get:
+      operationId: listDocumentQuizzes
+      tags: [quizzes]
+      summary: List saved quizzes for this document
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Quizzes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Quiz"
+    post:
+      operationId: createDocumentQuiz
+      tags: [quizzes]
+      summary: Generate and save a new quiz from selected chapters
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateQuizBody"
+      responses:
+        "201":
+          description: The created quiz with its generated questions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quiz"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: Could not generate questions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /quizzes/{quizId}:
+    get:
+      operationId: getQuiz
+      tags: [quizzes]
+      summary: Get one quiz with all its questions
+      parameters:
+        - name: quizId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Quiz
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quiz"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    delete:
+      operationId: deleteQuiz
+      tags: [quizzes]
+      summary: Delete a quiz and all its attempts
+      parameters:
+        - name: quizId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /quizzes/{quizId}/attempts:
+    get:
+      operationId: listQuizAttempts
+      tags: [quizzes]
+      summary: List all past attempts for a quiz, newest first
+      parameters:
+        - name: quizId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Attempts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/QuizAttempt"
+    post:
+      operationId: submitQuizAttempt
+      tags: [quizzes]
+      summary: Submit answers and get the graded attempt back
+      parameters:
+        - name: quizId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubmitAttemptBody"
+      responses:
+        "201":
+          description: Graded attempt
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuizAttempt"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
 components:
   schemas:
     HealthStatus:
@@ -265,6 +468,9 @@ components:
           enum: [processing, ready, failed]
         errorMessage:
           type: ["string", "null"]
+        kind:
+          type: string
+          enum: [curriculum, question_bank]
         questionCount:
           type: integer
         createdAt:
@@ -277,6 +483,7 @@ components:
         - totalPages
         - status
         - errorMessage
+        - kind
         - questionCount
         - createdAt
     DocumentPage:
@@ -383,3 +590,209 @@ components:
         - processingDocumentCount
         - totalPages
         - totalQuestions
+    Chapter:
+      type: object
+      properties:
+        id:
+          type: integer
+        documentId:
+          type: integer
+        orderIndex:
+          type: integer
+        title:
+          type: string
+        summary:
+          type: ["string", "null"]
+        startPage:
+          type: integer
+        endPage:
+          type: integer
+      required:
+        - id
+        - documentId
+        - orderIndex
+        - title
+        - summary
+        - startPage
+        - endPage
+    QuizQuestionType:
+      type: string
+      enum: [mcq, true_false, fill_blank, short_answer]
+    QuizDifficulty:
+      type: string
+      enum: [easy, medium, hard, mixed]
+    QuizSettings:
+      type: object
+      properties:
+        randomizeQuestions:
+          type: boolean
+        randomizeChoices:
+          type: boolean
+        timeLimitMinutes:
+          type: ["integer", "null"]
+        difficulty:
+          $ref: "#/components/schemas/QuizDifficulty"
+        allowedTypes:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuizQuestionType"
+      required:
+        - randomizeQuestions
+        - randomizeChoices
+        - difficulty
+        - allowedTypes
+    QuizQuestion:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          $ref: "#/components/schemas/QuizQuestionType"
+        prompt:
+          type: string
+        choices:
+          type: array
+          items:
+            type: string
+        correctAnswer:
+          type: string
+        explanation:
+          type: string
+        pageNumber:
+          type: integer
+        pageLabel:
+          type: ["string", "null"]
+        points:
+          type: integer
+      required:
+        - id
+        - type
+        - prompt
+        - correctAnswer
+        - points
+    Quiz:
+      type: object
+      properties:
+        id:
+          type: integer
+        documentId:
+          type: integer
+        name:
+          type: string
+        chapterIds:
+          type: array
+          items:
+            type: integer
+        settings:
+          $ref: "#/components/schemas/QuizSettings"
+        questions:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuizQuestion"
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - documentId
+        - name
+        - chapterIds
+        - settings
+        - questions
+        - createdAt
+    CreateQuizBody:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        chapterIds:
+          type: array
+          items:
+            type: integer
+          description: Empty array means "all chapters / whole document".
+        count:
+          type: integer
+          minimum: 1
+          maximum: 50
+        settings:
+          $ref: "#/components/schemas/QuizSettings"
+      required:
+        - name
+        - count
+        - settings
+    AttemptItem:
+      type: object
+      properties:
+        questionId:
+          type: string
+        userAnswer:
+          type: string
+        score:
+          type: number
+          description: Fractional score 0..1 awarded for this question.
+        verdict:
+          type: string
+          enum: [correct, partial, wrong, empty]
+        feedback:
+          type: string
+      required:
+        - questionId
+        - userAnswer
+        - score
+        - verdict
+    QuizAttempt:
+      type: object
+      properties:
+        id:
+          type: integer
+        quizId:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AttemptItem"
+        score:
+          type: integer
+        maxScore:
+          type: integer
+        completed:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - quizId
+        - items
+        - score
+        - maxScore
+        - completed
+        - createdAt
+    SubmitAttemptAnswer:
+      type: object
+      properties:
+        questionId:
+          type: string
+        userAnswer:
+          type: string
+      required:
+        - questionId
+        - userAnswer
+    SubmitAttemptBody:
+      type: object
+      properties:
+        answers:
+          type: array
+          items:
+            $ref: "#/components/schemas/SubmitAttemptAnswer"
+      required:
+        - answers
+    UpdateDocumentPayload:
+      type: object
+      properties:
+        title:
+          type: string
+        kind:
+          type: string
+          enum: [curriculum, question_bank]

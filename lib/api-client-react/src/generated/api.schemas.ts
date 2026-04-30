@@ -22,6 +22,13 @@ export const DocumentStatus = {
   failed: "failed",
 } as const;
 
+export type DocumentKind = (typeof DocumentKind)[keyof typeof DocumentKind];
+
+export const DocumentKind = {
+  curriculum: "curriculum",
+  question_bank: "question_bank",
+} as const;
+
 export interface Document {
   id: number;
   title: string;
@@ -30,6 +37,7 @@ export interface Document {
   status: DocumentStatus;
   /** @nullable */
   errorMessage: string | null;
+  kind: DocumentKind;
   questionCount: number;
   createdAt: string;
 }
@@ -78,6 +86,133 @@ export interface LibraryStats {
   processingDocumentCount: number;
   totalPages: number;
   totalQuestions: number;
+}
+
+export interface Chapter {
+  id: number;
+  documentId: number;
+  orderIndex: number;
+  title: string;
+  /** @nullable */
+  summary: string | null;
+  startPage: number;
+  endPage: number;
+}
+
+export type QuizQuestionType =
+  (typeof QuizQuestionType)[keyof typeof QuizQuestionType];
+
+export const QuizQuestionType = {
+  mcq: "mcq",
+  true_false: "true_false",
+  fill_blank: "fill_blank",
+  short_answer: "short_answer",
+} as const;
+
+export type QuizDifficulty =
+  (typeof QuizDifficulty)[keyof typeof QuizDifficulty];
+
+export const QuizDifficulty = {
+  easy: "easy",
+  medium: "medium",
+  hard: "hard",
+  mixed: "mixed",
+} as const;
+
+export interface QuizSettings {
+  randomizeQuestions: boolean;
+  randomizeChoices: boolean;
+  /** @nullable */
+  timeLimitMinutes?: number | null;
+  difficulty: QuizDifficulty;
+  allowedTypes: QuizQuestionType[];
+}
+
+export interface QuizQuestion {
+  id: string;
+  type: QuizQuestionType;
+  prompt: string;
+  choices?: string[];
+  correctAnswer: string;
+  explanation?: string;
+  pageNumber?: number;
+  /** @nullable */
+  pageLabel?: string | null;
+  points: number;
+}
+
+export interface Quiz {
+  id: number;
+  documentId: number;
+  name: string;
+  chapterIds: number[];
+  settings: QuizSettings;
+  questions: QuizQuestion[];
+  createdAt: string;
+}
+
+export interface CreateQuizBody {
+  /** @minLength 1 */
+  name: string;
+  /** Empty array means "all chapters / whole document". */
+  chapterIds?: number[];
+  /**
+   * @minimum 1
+   * @maximum 50
+   */
+  count: number;
+  settings: QuizSettings;
+}
+
+export type AttemptItemVerdict =
+  (typeof AttemptItemVerdict)[keyof typeof AttemptItemVerdict];
+
+export const AttemptItemVerdict = {
+  correct: "correct",
+  partial: "partial",
+  wrong: "wrong",
+  empty: "empty",
+} as const;
+
+export interface AttemptItem {
+  questionId: string;
+  userAnswer: string;
+  /** Fractional score 0..1 awarded for this question. */
+  score: number;
+  verdict: AttemptItemVerdict;
+  feedback?: string;
+}
+
+export interface QuizAttempt {
+  id: number;
+  quizId: number;
+  items: AttemptItem[];
+  score: number;
+  maxScore: number;
+  completed: boolean;
+  createdAt: string;
+}
+
+export interface SubmitAttemptAnswer {
+  questionId: string;
+  userAnswer: string;
+}
+
+export interface SubmitAttemptBody {
+  answers: SubmitAttemptAnswer[];
+}
+
+export type UpdateDocumentPayloadKind =
+  (typeof UpdateDocumentPayloadKind)[keyof typeof UpdateDocumentPayloadKind];
+
+export const UpdateDocumentPayloadKind = {
+  curriculum: "curriculum",
+  question_bank: "question_bank",
+} as const;
+
+export interface UpdateDocumentPayload {
+  title?: string;
+  kind?: UpdateDocumentPayloadKind;
 }
 
 export type AskDocumentFromImageBody = {

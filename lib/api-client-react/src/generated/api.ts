@@ -20,12 +20,18 @@ import type {
   ApiError,
   AskDocumentFromImageBody,
   AskQuestionBody,
+  Chapter,
+  CreateQuizBody,
   Document,
   DocumentPage,
   HealthStatus,
   LibraryStats,
   QuestionRecord,
+  Quiz,
+  QuizAttempt,
   RecentQuestion,
+  SubmitAttemptBody,
+  UpdateDocumentPayload,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -424,6 +430,93 @@ export const useDeleteDocument = <
   TContext
 > => {
   return useMutation(getDeleteDocumentMutationOptions(options));
+};
+
+/**
+ * @summary Update document properties (title and/or kind)
+ */
+export const getUpdateDocumentUrl = (id: number) => {
+  return `/api/documents/${id}`;
+};
+
+export const updateDocument = async (
+  id: number,
+  updateDocumentPayload: UpdateDocumentPayload,
+  options?: RequestInit,
+): Promise<Document> => {
+  return customFetch<Document>(getUpdateDocumentUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateDocumentPayload),
+  });
+};
+
+export const getUpdateDocumentMutationOptions = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateDocument>>,
+    TError,
+    { id: number; data: BodyType<UpdateDocumentPayload> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateDocument>>,
+  TError,
+  { id: number; data: BodyType<UpdateDocumentPayload> },
+  TContext
+> => {
+  const mutationKey = ["updateDocument"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateDocument>>,
+    { id: number; data: BodyType<UpdateDocumentPayload> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateDocument(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateDocumentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateDocument>>
+>;
+export type UpdateDocumentMutationBody = BodyType<UpdateDocumentPayload>;
+export type UpdateDocumentMutationError = ErrorType<ApiError>;
+
+/**
+ * @summary Update document properties (title and/or kind)
+ */
+export const useUpdateDocument = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateDocument>>,
+    TError,
+    { id: number; data: BodyType<UpdateDocumentPayload> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateDocument>>,
+  TError,
+  { id: number; data: BodyType<UpdateDocumentPayload> },
+  TContext
+> => {
+  return useMutation(getUpdateDocumentMutationOptions(options));
 };
 
 /**
@@ -856,3 +949,602 @@ export function useListRecentQuestions<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * Extracts chapters lazily on first call and caches them.
+ * @summary List the auto-detected chapters of a document
+ */
+export const getListDocumentChaptersUrl = (id: number) => {
+  return `/api/documents/${id}/chapters`;
+};
+
+export const listDocumentChapters = async (
+  id: number,
+  options?: RequestInit,
+): Promise<Chapter[]> => {
+  return customFetch<Chapter[]>(getListDocumentChaptersUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListDocumentChaptersQueryKey = (id: number) => {
+  return [`/api/documents/${id}/chapters`] as const;
+};
+
+export const getListDocumentChaptersQueryOptions = <
+  TData = Awaited<ReturnType<typeof listDocumentChapters>>,
+  TError = ErrorType<ApiError>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listDocumentChapters>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListDocumentChaptersQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listDocumentChapters>>
+  > = ({ signal }) => listDocumentChapters(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listDocumentChapters>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListDocumentChaptersQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listDocumentChapters>>
+>;
+export type ListDocumentChaptersQueryError = ErrorType<ApiError>;
+
+/**
+ * @summary List the auto-detected chapters of a document
+ */
+
+export function useListDocumentChapters<
+  TData = Awaited<ReturnType<typeof listDocumentChapters>>,
+  TError = ErrorType<ApiError>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listDocumentChapters>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListDocumentChaptersQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List saved quizzes for this document
+ */
+export const getListDocumentQuizzesUrl = (id: number) => {
+  return `/api/documents/${id}/quizzes`;
+};
+
+export const listDocumentQuizzes = async (
+  id: number,
+  options?: RequestInit,
+): Promise<Quiz[]> => {
+  return customFetch<Quiz[]>(getListDocumentQuizzesUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListDocumentQuizzesQueryKey = (id: number) => {
+  return [`/api/documents/${id}/quizzes`] as const;
+};
+
+export const getListDocumentQuizzesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listDocumentQuizzes>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listDocumentQuizzes>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListDocumentQuizzesQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listDocumentQuizzes>>
+  > = ({ signal }) => listDocumentQuizzes(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listDocumentQuizzes>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListDocumentQuizzesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listDocumentQuizzes>>
+>;
+export type ListDocumentQuizzesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List saved quizzes for this document
+ */
+
+export function useListDocumentQuizzes<
+  TData = Awaited<ReturnType<typeof listDocumentQuizzes>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listDocumentQuizzes>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListDocumentQuizzesQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Generate and save a new quiz from selected chapters
+ */
+export const getCreateDocumentQuizUrl = (id: number) => {
+  return `/api/documents/${id}/quizzes`;
+};
+
+export const createDocumentQuiz = async (
+  id: number,
+  createQuizBody: CreateQuizBody,
+  options?: RequestInit,
+): Promise<Quiz> => {
+  return customFetch<Quiz>(getCreateDocumentQuizUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createQuizBody),
+  });
+};
+
+export const getCreateDocumentQuizMutationOptions = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createDocumentQuiz>>,
+    TError,
+    { id: number; data: BodyType<CreateQuizBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createDocumentQuiz>>,
+  TError,
+  { id: number; data: BodyType<CreateQuizBody> },
+  TContext
+> => {
+  const mutationKey = ["createDocumentQuiz"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createDocumentQuiz>>,
+    { id: number; data: BodyType<CreateQuizBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return createDocumentQuiz(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateDocumentQuizMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createDocumentQuiz>>
+>;
+export type CreateDocumentQuizMutationBody = BodyType<CreateQuizBody>;
+export type CreateDocumentQuizMutationError = ErrorType<ApiError>;
+
+/**
+ * @summary Generate and save a new quiz from selected chapters
+ */
+export const useCreateDocumentQuiz = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createDocumentQuiz>>,
+    TError,
+    { id: number; data: BodyType<CreateQuizBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createDocumentQuiz>>,
+  TError,
+  { id: number; data: BodyType<CreateQuizBody> },
+  TContext
+> => {
+  return useMutation(getCreateDocumentQuizMutationOptions(options));
+};
+
+/**
+ * @summary Get one quiz with all its questions
+ */
+export const getGetQuizUrl = (quizId: number) => {
+  return `/api/quizzes/${quizId}`;
+};
+
+export const getQuiz = async (
+  quizId: number,
+  options?: RequestInit,
+): Promise<Quiz> => {
+  return customFetch<Quiz>(getGetQuizUrl(quizId), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetQuizQueryKey = (quizId: number) => {
+  return [`/api/quizzes/${quizId}`] as const;
+};
+
+export const getGetQuizQueryOptions = <
+  TData = Awaited<ReturnType<typeof getQuiz>>,
+  TError = ErrorType<ApiError>,
+>(
+  quizId: number,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getQuiz>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetQuizQueryKey(quizId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getQuiz>>> = ({
+    signal,
+  }) => getQuiz(quizId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!quizId,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof getQuiz>>, TError, TData> & {
+    queryKey: QueryKey;
+  };
+};
+
+export type GetQuizQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getQuiz>>
+>;
+export type GetQuizQueryError = ErrorType<ApiError>;
+
+/**
+ * @summary Get one quiz with all its questions
+ */
+
+export function useGetQuiz<
+  TData = Awaited<ReturnType<typeof getQuiz>>,
+  TError = ErrorType<ApiError>,
+>(
+  quizId: number,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getQuiz>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetQuizQueryOptions(quizId, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Delete a quiz and all its attempts
+ */
+export const getDeleteQuizUrl = (quizId: number) => {
+  return `/api/quizzes/${quizId}`;
+};
+
+export const deleteQuiz = async (
+  quizId: number,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteQuizUrl(quizId), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteQuizMutationOptions = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteQuiz>>,
+    TError,
+    { quizId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteQuiz>>,
+  TError,
+  { quizId: number },
+  TContext
+> => {
+  const mutationKey = ["deleteQuiz"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteQuiz>>,
+    { quizId: number }
+  > = (props) => {
+    const { quizId } = props ?? {};
+
+    return deleteQuiz(quizId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteQuizMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteQuiz>>
+>;
+
+export type DeleteQuizMutationError = ErrorType<ApiError>;
+
+/**
+ * @summary Delete a quiz and all its attempts
+ */
+export const useDeleteQuiz = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteQuiz>>,
+    TError,
+    { quizId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteQuiz>>,
+  TError,
+  { quizId: number },
+  TContext
+> => {
+  return useMutation(getDeleteQuizMutationOptions(options));
+};
+
+/**
+ * @summary List all past attempts for a quiz, newest first
+ */
+export const getListQuizAttemptsUrl = (quizId: number) => {
+  return `/api/quizzes/${quizId}/attempts`;
+};
+
+export const listQuizAttempts = async (
+  quizId: number,
+  options?: RequestInit,
+): Promise<QuizAttempt[]> => {
+  return customFetch<QuizAttempt[]>(getListQuizAttemptsUrl(quizId), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListQuizAttemptsQueryKey = (quizId: number) => {
+  return [`/api/quizzes/${quizId}/attempts`] as const;
+};
+
+export const getListQuizAttemptsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listQuizAttempts>>,
+  TError = ErrorType<unknown>,
+>(
+  quizId: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listQuizAttempts>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListQuizAttemptsQueryKey(quizId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listQuizAttempts>>
+  > = ({ signal }) => listQuizAttempts(quizId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!quizId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listQuizAttempts>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListQuizAttemptsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listQuizAttempts>>
+>;
+export type ListQuizAttemptsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List all past attempts for a quiz, newest first
+ */
+
+export function useListQuizAttempts<
+  TData = Awaited<ReturnType<typeof listQuizAttempts>>,
+  TError = ErrorType<unknown>,
+>(
+  quizId: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listQuizAttempts>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListQuizAttemptsQueryOptions(quizId, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Submit answers and get the graded attempt back
+ */
+export const getSubmitQuizAttemptUrl = (quizId: number) => {
+  return `/api/quizzes/${quizId}/attempts`;
+};
+
+export const submitQuizAttempt = async (
+  quizId: number,
+  submitAttemptBody: SubmitAttemptBody,
+  options?: RequestInit,
+): Promise<QuizAttempt> => {
+  return customFetch<QuizAttempt>(getSubmitQuizAttemptUrl(quizId), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(submitAttemptBody),
+  });
+};
+
+export const getSubmitQuizAttemptMutationOptions = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof submitQuizAttempt>>,
+    TError,
+    { quizId: number; data: BodyType<SubmitAttemptBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof submitQuizAttempt>>,
+  TError,
+  { quizId: number; data: BodyType<SubmitAttemptBody> },
+  TContext
+> => {
+  const mutationKey = ["submitQuizAttempt"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof submitQuizAttempt>>,
+    { quizId: number; data: BodyType<SubmitAttemptBody> }
+  > = (props) => {
+    const { quizId, data } = props ?? {};
+
+    return submitQuizAttempt(quizId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SubmitQuizAttemptMutationResult = NonNullable<
+  Awaited<ReturnType<typeof submitQuizAttempt>>
+>;
+export type SubmitQuizAttemptMutationBody = BodyType<SubmitAttemptBody>;
+export type SubmitQuizAttemptMutationError = ErrorType<ApiError>;
+
+/**
+ * @summary Submit answers and get the graded attempt back
+ */
+export const useSubmitQuizAttempt = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof submitQuizAttempt>>,
+    TError,
+    { quizId: number; data: BodyType<SubmitAttemptBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof submitQuizAttempt>>,
+  TError,
+  { quizId: number; data: BodyType<SubmitAttemptBody> },
+  TContext
+> => {
+  return useMutation(getSubmitQuizAttemptMutationOptions(options));
+};

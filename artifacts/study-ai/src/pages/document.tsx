@@ -52,6 +52,9 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { RichAnswer } from "@/components/rich-answer";
+import { QuizPanel } from "@/components/quiz-panel";
+import { MessageSquare, GraduationCap } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export function Document() {
   const params = useParams();
@@ -59,6 +62,7 @@ export function Document() {
   const queryClient = useQueryClient();
   
   const [question, setQuestion] = useState("");
+  const [activeTab, setActiveTab] = useState<"qna" | "quiz">("qna");
   const [activePage, setActivePage] = useState<{
     pageNumber: number;
     pageLabel: string | null;
@@ -285,28 +289,69 @@ export function Document() {
       {/* Left Pane - Chat Area */}
       <div className="flex-1 flex flex-col relative border-l min-h-0 min-w-0">
         {/* Document Header */}
-        <div className="border-b bg-background/95 backdrop-blur px-6 py-4 flex items-center justify-between z-10 shrink-0">
-          <div>
-            <h1 className="font-bold text-lg line-clamp-1">{document.title}</h1>
-            <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
-              <span className="flex items-center gap-1"><FileText className="h-3 w-3" /> {document.totalPages} صفحة</span>
-              <span>•</span>
-              <span>تم الرفع في {format(new Date(document.createdAt), "dd MMM yyyy", { locale: ar })}</span>
+        <div className="border-b bg-background/95 backdrop-blur px-6 py-3 z-10 shrink-0 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <h1 className="font-bold text-lg line-clamp-1">{document.title}</h1>
+              <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
+                <span className="flex items-center gap-1"><FileText className="h-3 w-3" /> {document.totalPages} صفحة</span>
+                <span>•</span>
+                <span>تم الرفع في {format(new Date(document.createdAt), "dd MMM yyyy", { locale: ar })}</span>
+              </div>
             </div>
+            {activeTab === "qna" && activePage && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="md:hidden gap-2 shrink-0"
+                onClick={() => setIsMobileSourceOpen(true)}
+              >
+                <BookOpen className="h-4 w-4" />
+                المصدر
+              </Button>
+            )}
           </div>
-          {activePage && (
-            <Button 
-              variant="outline" 
-              size="sm" 
-              className="md:hidden gap-2"
-              onClick={() => setIsMobileSourceOpen(true)}
+          {/* Tabs */}
+          <div className="flex gap-1 border rounded-lg p-1 bg-muted/40 w-fit">
+            <button
+              type="button"
+              onClick={() => setActiveTab("qna")}
+              data-testid="tab-qna"
+              className={cn(
+                "flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-medium transition-colors",
+                activeTab === "qna"
+                  ? "bg-background shadow-sm text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
             >
-              <BookOpen className="h-4 w-4" />
-              المصدر
-            </Button>
-          )}
+              <MessageSquare className="h-4 w-4" />
+              أسئلة وأجوبة
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("quiz")}
+              data-testid="tab-quiz"
+              className={cn(
+                "flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-medium transition-colors",
+                activeTab === "quiz"
+                  ? "bg-background shadow-sm text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <GraduationCap className="h-4 w-4" />
+              الاختبارات
+            </button>
+          </div>
         </div>
 
+        {activeTab === "quiz" ? (
+          <div className="flex-1 overflow-y-auto p-4 md:p-6">
+            <div className="max-w-3xl mx-auto">
+              <QuizPanel documentId={id} />
+            </div>
+          </div>
+        ) : (
+          <>
         {/* Q&A History */}
         <div className="flex-1 overflow-y-auto p-4 md:p-6" ref={scrollRef}>
           {questionsLoading ? (
@@ -532,6 +577,8 @@ export function Document() {
             عنها من المذكرة.
           </p>
         </div>
+        </>
+        )}
       </div>
 
       {/* Image upload dialog */}
@@ -594,14 +641,16 @@ export function Document() {
         </DialogContent>
       </Dialog>
 
-      {/* Right Pane - Source Viewer (Desktop) */}
-      <div className="hidden md:flex w-[400px] lg:w-[500px] flex-col bg-muted/10 shrink-0">
-        <SourceViewer
-          documentId={id}
-          pageNumber={activePage?.pageNumber ?? null}
-          pageLabel={activePage?.pageLabel ?? null}
-        />
-      </div>
+      {/* Right Pane - Source Viewer (Desktop) — only on Q&A tab */}
+      {activeTab === "qna" && (
+        <div className="hidden md:flex w-[400px] lg:w-[500px] flex-col bg-muted/10 shrink-0">
+          <SourceViewer
+            documentId={id}
+            pageNumber={activePage?.pageNumber ?? null}
+            pageLabel={activePage?.pageLabel ?? null}
+          />
+        </div>
+      )}
 
       {/* Mobile Source Viewer Sheet */}
       <Sheet open={isMobileSourceOpen} onOpenChange={setIsMobileSourceOpen}>

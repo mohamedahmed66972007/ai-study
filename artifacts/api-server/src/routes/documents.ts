@@ -28,6 +28,7 @@ function serializeDocument(
     totalPages: doc.totalPages,
     status: doc.status,
     errorMessage: doc.errorMessage,
+    kind: doc.kind === "question_bank" ? "question_bank" : "curriculum",
     questionCount,
     createdAt: doc.createdAt.toISOString(),
   };
@@ -111,6 +112,8 @@ router.post(
       return;
     }
     const title = titleRaw || file.originalname.replace(/\.pdf$/i, "");
+    const kindRaw = (req.body?.kind ?? "").toString().trim();
+    const kind = kindRaw === "question_bank" ? "question_bank" : "curriculum";
 
     const [created] = await db
       .insert(documentsTable)
@@ -119,6 +122,7 @@ router.post(
         filename: file.originalname,
         status: "processing",
         totalPages: 0,
+        kind,
         fileData: file.buffer,
       })
       .returning();
@@ -183,6 +187,40 @@ router.get("/documents/:id", async (req: Request, res: Response) => {
     .from(questionsTable)
     .where(eq(questionsTable.documentId, id));
   res.json(serializeDocument(doc, count ?? 0));
+});
+
+router.patch("/documents/:id", async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) {
+    res.status(400).json({ error: "معرف غير صالح" });
+    return;
+  }
+  const body = req.body as { kind?: unknown; title?: unknown };
+  const updates: Partial<typeof documentsTable.$inferInsert> = {};
+  if (body && typeof body.kind === "string") {
+    updates.kind = body.kind === "question_bank" ? "question_bank" : "curriculum";
+  }
+  if (body && typeof body.title === "string" && body.title.trim()) {
+    updates.title = body.title.trim();
+  }
+  if (Object.keys(updates).length === 0) {
+    res.status(400).json({ error: "لا يوجد تحديث" });
+    return;
+  }
+  const [updated] = await db
+    .update(documentsTable)
+    .set(updates)
+    .where(eq(documentsTable.id, id))
+    .returning();
+  if (!updated) {
+    res.status(404).json({ error: "المستند غير موجود" });
+    return;
+  }
+  const [{ count }] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(questionsTable)
+    .where(eq(questionsTable.documentId, id));
+  res.json(serializeDocument(updated, count ?? 0));
 });
 
 router.delete("/documents/:id", async (req: Request, res: Response) => {
